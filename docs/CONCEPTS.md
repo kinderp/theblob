@@ -9,6 +9,11 @@ Set of nodes available to the Personal World. A node advertises hardware, softwa
 ## Surface
 A device-specific projection of a Workspace or Task. The same Workspace can render as a full desktop environment, a mobile review surface or a watch notification/action surface. Surface state should be typed and inspectable so that agents operate on semantic UI elements rather than pixels whenever possible.
 
+## Experience Profile
+Versioned description of how a Workspace Surface should be presented and interacted with on a given device/platform or context. It is independent from the Workspace Recipe and from the renderer implementation.
+
+Examples include `blob-native`, `macos-native`, `hyprland`, and future GNOME/KDE/Android/accessibility profiles. Profiles may be selected per device or per Workspace. They preserve stable interaction grammar while allowing platform-native presentation. The same Workspace can therefore behave natively on macOS and use a Hyprland keyboard/tiling workflow on Linux without duplicating its state, Tasks or Capabilities.
+
 ## Workspace
 A relatively persistent interactive environment and **semantic namespace** for a domain of work: Web, Development, Writing, Research, Media, Communication, etc. It composes relevant Knowledge Objects/Views, persistent context, experience grammar, baseline capabilities, dynamic capability requirements, policies, Tasks and Surface state. It owns experience-level layout and preferences, not user data or executable implementations.
 
