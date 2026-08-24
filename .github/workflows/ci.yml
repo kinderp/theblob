@@ -136,3 +136,45 @@ jobs:
           echo "Built VM candidate: $out"
           test -d "$out/bin"
           ls -la "$out/bin"
+
+  nixos-vm-boot:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-vm-boot')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build smoke-test NixOS VM candidate
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          out=$(nix build --no-link --print-out-paths .#nixosConfigurations.blob-pilot-smoke.config.system.build.vm)
+          echo "$out" > /tmp/blob-smoke-vm-path
+          echo "Built smoke VM candidate: $out"
+          ls -la "$out/bin"
+
+      - name: Boot candidate to userspace and observe marker
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          out=$(cat /tmp/blob-smoke-vm-path)
+          runner=$(find "$out/bin" -maxdepth 1 \( -type f -o -type l \) | head -n1)
+          test -n "$runner"
+          rm -f blob-pilot.qcow2
+
+          set +e
+          output=$(timeout 90s env \
+            QEMU_OPTS="-nographic -serial mon:stdio" \
+            QEMU_KERNEL_PARAMS="console=ttyS0" \
+            "$runner" 2>&1)
+          rc=$?
+          set -e
+
+          printf '%s\n' "$output"
+          grep -q 'BLOB_VM_BOOT_OK' <<< "$output"
+          test "$rc" -eq 0
