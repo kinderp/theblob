@@ -172,6 +172,18 @@ pub struct SystemCandidateOperation {
     pub authority: SystemAuthorityClass,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SystemOperationViolation {
+    EffectClassMismatch {
+        expected: SystemEffectClass,
+        actual: SystemEffectClass,
+    },
+    AuthorityMismatch {
+        expected: SystemAuthorityClass,
+        actual: SystemAuthorityClass,
+    },
+}
+
 impl SystemCandidateOperation {
     pub fn new(
         id: impl Into<SystemOperationId>,
@@ -187,6 +199,31 @@ impl SystemCandidateOperation {
             action,
             effect_class,
             authority,
+        }
+    }
+
+    pub fn validate_policy(&self) -> Result<(), Vec<SystemOperationViolation>> {
+        let (expected_effect, expected_authority) = action_policy(&self.action);
+        let mut violations = Vec::new();
+
+        if self.effect_class != expected_effect {
+            violations.push(SystemOperationViolation::EffectClassMismatch {
+                expected: expected_effect,
+                actual: self.effect_class.clone(),
+            });
+        }
+
+        if self.authority != expected_authority {
+            violations.push(SystemOperationViolation::AuthorityMismatch {
+                expected: expected_authority,
+                actual: self.authority.clone(),
+            });
+        }
+
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
         }
     }
 
@@ -303,6 +340,7 @@ mod tests {
         assert_eq!(operation.effect_class, SystemEffectClass::MaterializationOnly);
         assert_eq!(operation.authority, SystemAuthorityClass::User);
         assert!(!operation.changes_live_system());
+        assert_eq!(operation.validate_policy(), Ok(()));
     }
 
     #[test]
@@ -316,6 +354,7 @@ mod tests {
         assert_eq!(operation.effect_class, SystemEffectClass::PreviewHooks);
         assert_eq!(operation.authority, SystemAuthorityClass::HostAdministrator);
         assert!(!operation.changes_live_system());
+        assert_eq!(operation.validate_policy(), Ok(()));
     }
 
     #[test]
@@ -332,6 +371,7 @@ mod tests {
         );
         assert_eq!(operation.authority, SystemAuthorityClass::HostAdministrator);
         assert!(operation.changes_live_system());
+        assert_eq!(operation.validate_policy(), Ok(()));
     }
 
     #[test]
@@ -345,5 +385,31 @@ mod tests {
         assert_eq!(operation.effect_class, SystemEffectClass::MaterializationOnly);
         assert_eq!(operation.authority, SystemAuthorityClass::User);
         assert!(!operation.changes_live_system());
+        assert_eq!(operation.validate_policy(), Ok(()));
+    }
+
+    #[test]
+    fn forged_operation_policy_is_rejected() {
+        let mut operation = SystemCandidateOperation::new(
+            "op:test",
+            "candidate:one",
+            "system:pilot",
+            SystemCandidateAction::TestActivation,
+        );
+        operation.effect_class = SystemEffectClass::MaterializationOnly;
+        operation.authority = SystemAuthorityClass::User;
+
+        assert!(matches!(
+            operation.validate_policy(),
+            Err(violations)
+                if violations.iter().any(|violation| matches!(
+                    violation,
+                    SystemOperationViolation::EffectClassMismatch { .. }
+                ))
+                && violations.iter().any(|violation| matches!(
+                    violation,
+                    SystemOperationViolation::AuthorityMismatch { .. }
+                ))
+        ));
     }
 }
