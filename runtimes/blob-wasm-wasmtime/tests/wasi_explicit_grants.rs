@@ -39,7 +39,7 @@ impl Drop for ScratchDir {
 
 fn fixture_component() -> Vec<u8> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("target/wasi-fixtures/wasm32-wasip2/release/blob_wasi_fs_probe.wasm");
+        .join("target/wasi-fixtures/wasm32-wasip2/release/blob-wasi-fs-probe.wasm");
     fs::read(&path).unwrap_or_else(|error| {
         panic!(
             "missing WASIp2 fixture at {}: {error}; build fixtures/fs-probe with the CI target-dir first",
