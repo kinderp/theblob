@@ -5,7 +5,7 @@ use blob_core::{BindingLeaseId, ImplementationId, TaskId};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::p2::bindings::sync::Command;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, I32Exit, WasiCtx, WasiCtxView, WasiView};
 
 pub const WASI_RUNTIME_ID: &str = "wasmtime-wasip2@48";
 
@@ -53,6 +53,7 @@ pub struct WasiCommandExecutionResult {
     pub lease: BindingLeaseId,
     pub implementation: ImplementationId,
     pub runtime: String,
+    pub exit_code: i32,
     pub success: bool,
     pub duration_us: u64,
     pub applied_filesystem_grants: Vec<AppliedFilesystemGrant>,
@@ -167,13 +168,20 @@ impl ExplicitGrantWasiRuntime {
         })?;
 
         let started = Instant::now();
-        let program_result = command
-            .wasi_cli_run()
-            .call_run(&mut store)
-            .map_err(|error| WasiRuntimeError {
-                stage: WasiRuntimeStage::Execute,
-                message: error.to_string(),
-            })?;
+        let exit_code = match command.wasi_cli_run().call_run(&mut store) {
+            Ok(Ok(())) => 0,
+            Ok(Err(())) => 1,
+            Err(error) => {
+                if let Some(exit) = error.downcast_ref::<I32Exit>() {
+                    exit.0
+                } else {
+                    return Err(WasiRuntimeError {
+                        stage: WasiRuntimeStage::Execute,
+                        message: error.to_string(),
+                    });
+                }
+            }
+        };
         let duration_us = started.elapsed().as_micros().min(u64::MAX as u128) as u64;
 
         Ok(WasiCommandExecutionResult {
@@ -181,7 +189,8 @@ impl ExplicitGrantWasiRuntime {
             lease: request.lease.clone(),
             implementation: request.capsule.implementation.clone(),
             runtime: WASI_RUNTIME_ID.into(),
-            success: program_result.is_ok(),
+            exit_code,
+            success: exit_code == 0,
             duration_us,
             applied_filesystem_grants,
         })
