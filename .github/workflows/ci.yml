@@ -58,16 +58,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install runtime Rust toolchain
+      - name: Install runtime Rust toolchain and WASIp2 target
         run: |
           rustup toolchain install 1.95.0 --profile minimal
           rustup default 1.95.0
           rustup component add rustfmt
+          rustup target add wasm32-wasip2
 
       - name: Parse and normalize runtime formatting
         working-directory: runtimes/blob-wasm-wasmtime
         run: cargo fmt --all
 
-      - name: Test deny-by-default Component runtime
+      - name: Format WASIp2 filesystem probe
+        working-directory: runtimes/blob-wasm-wasmtime/fixtures/fs-probe
+        run: cargo fmt --all --check
+
+      - name: Build WASIp2 filesystem probe
+        working-directory: runtimes/blob-wasm-wasmtime/fixtures/fs-probe
+        run: cargo build --target wasm32-wasip2 --release
+
+      - name: Test deny-by-default and explicit-grant Component runtime
         working-directory: runtimes/blob-wasm-wasmtime
         run: cargo test
