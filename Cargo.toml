@@ -6,6 +6,7 @@ members = [
     "crates/blob-resolver",
     "crates/blob-executor",
     "crates/blob-history",
+    "crates/blob-mvp",
 ]
 
 [workspace.package]
