@@ -1,7 +1,7 @@
 use crate::execution::SemanticType;
 use crate::ids::{
-    ExperienceProfileId, GoalId, KnowledgeObjectId, PersonalWorldId, ProjectionId,
-    RepresentationId, TaskId, WorkspaceId, WorkspaceRecipeId,
+    CapabilityId, ExperienceProfileId, GoalId, KnowledgeObjectId, NodeId, PersonalWorldId,
+    ProjectionId, RepresentationId, TaskId, WorkspaceId, WorkspaceRecipeId,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -9,7 +9,7 @@ pub struct PersonalWorld {
     pub id: PersonalWorldId,
     pub workspace_ids: Vec<WorkspaceId>,
     pub goal_ids: Vec<GoalId>,
-    pub trusted_node_ids: Vec<String>,
+    pub trusted_node_ids: Vec<NodeId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,7 +43,7 @@ pub struct WorkspaceRecipe {
     pub version: String,
     pub construction_mode: WorkspaceConstructionMode,
     pub grammar: ExperienceGrammar,
-    pub baseline_capabilities: Vec<String>,
+    pub baseline_capabilities: Vec<CapabilityId>,
     pub policy_defaults: Vec<String>,
 }
 
@@ -61,7 +61,7 @@ pub struct Workspace {
     pub task_ids: Vec<TaskId>,
     pub goal_ids: Vec<GoalId>,
     pub relevant_views: Vec<String>,
-    pub baseline_capability_requirements: Vec<String>,
+    pub baseline_capability_requirements: Vec<CapabilityId>,
     pub grammar: ExperienceGrammar,
     pub experience_profiles: Vec<WorkspaceExperienceBinding>,
     pub policy_overlays: Vec<String>,
@@ -107,7 +107,7 @@ pub struct Representation {
     pub id: RepresentationId,
     pub source: KnowledgeObjectId,
     pub representation_type: SemanticType,
-    pub transformation_capability: String,
+    pub transformation_capability: CapabilityId,
     pub source_revision: String,
     pub artifact_ref: Option<String>,
     pub freshness: RepresentationFreshness,
