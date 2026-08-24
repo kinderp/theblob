@@ -38,6 +38,7 @@ Start here:
 - [`docs/VISION.md`](docs/VISION.md)
 - [`docs/CONCEPTS.md`](docs/CONCEPTS.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/ARCHITECTURE-v0.5-DELTA.md`](docs/ARCHITECTURE-v0.5-DELTA.md) — accepted System Technician/AI Broker delta pending consolidated freeze
 - [`docs/ARCHAEOLOGY.md`](docs/ARCHAEOLOGY.md)
 - [`docs/NAME.md`](docs/NAME.md)
 
