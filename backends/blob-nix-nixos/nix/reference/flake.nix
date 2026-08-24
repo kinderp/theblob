@@ -6,13 +6,17 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/a9e6d84f9c2f9012f5fe7d964a7851352300e61a";
 
   outputs = { self, nixpkgs }:
-    {
-      nixosConfigurations.blob-pilot = nixpkgs.lib.nixosSystem {
+    let
+      mkBlobPilot = extraModules: nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         modules = [
           ./base.nix
           ./generated.nix
-        ];
+        ] ++ extraModules;
       };
+    in
+    {
+      nixosConfigurations.blob-pilot = mkBlobPilot [ ];
+      nixosConfigurations.blob-pilot-smoke = mkBlobPilot [ ./smoke.nix ];
     };
 }
