@@ -68,15 +68,34 @@ pub enum RuntimeKind {
     Hardware,
 }
 
+impl RuntimeKind {
+    pub fn tag(&self) -> &'static str {
+        match self {
+            Self::Wasm => "wasm",
+            Self::Oci => "oci",
+            Self::MicroVm => "microvm",
+            Self::Native => "native",
+            Self::LocalModel => "local-model",
+            Self::RemoteService => "remote-service",
+            Self::Hardware => "hardware",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapabilityImplementation {
     pub id: ImplementationId,
     pub implements: CapabilityId,
     pub runtime: RuntimeKind,
+    pub trusted: bool,
     pub supported_platforms: Vec<String>,
     pub required_memory_bytes: u64,
     pub required_accelerators: Vec<String>,
     pub network_required: bool,
+    pub quality_ppm: u32,
+    pub expected_latency_us: u64,
+    pub expected_energy_uj: u64,
+    pub cost_microeur: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
