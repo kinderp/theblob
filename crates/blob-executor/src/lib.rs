@@ -25,7 +25,7 @@ pub struct ExecutionRequest {
     pub capsule: LocalProcessCapsule,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExecutionStatus {
     Succeeded,
     Failed,
