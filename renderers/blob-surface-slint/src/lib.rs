@@ -73,7 +73,7 @@ slint::slint! {
                         padding: 16px;
                         spacing: 10px;
                         Text { text: "TASK"; color: #7f8da6; font-size: 12px; font-weight: 700; }
-                        Text { text: root.task-status; color: #7ee787; font-size: 20px; font-weight: 700; }
+                        Text { text: root.task-status; color: #a7e787; font-size: 20px; font-weight: 700; }
                         Text { text: "BINDING"; color: #7f8da6; font-size: 12px; font-weight: 700; }
                         Text { text: root.binding-summary; color: #eef2f8; font-size: 15px; }
                         Text { text: "VERIFIER"; color: #7f8da6; font-size: 12px; font-weight: 700; }
