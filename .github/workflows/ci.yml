@@ -114,3 +114,25 @@ jobs:
       - name: Evaluate NixOS VM derivation
         working-directory: backends/blob-nix-nixos/nix/reference
         run: nix eval --raw .#nixosConfigurations.blob-pilot.config.system.build.vm.drvPath
+
+  nixos-vm-build:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-vm-build')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build real NixOS VM candidate
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          out=$(nix build --no-link --print-out-paths .#nixosConfigurations.blob-pilot.config.system.build.vm)
+          echo "Built VM candidate: $out"
+          test -d "$out/bin"
+          ls -la "$out/bin"
