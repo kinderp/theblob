@@ -11,6 +11,7 @@ members = [
 ]
 exclude = [
     "renderers/blob-surface-slint",
+    "runtimes/blob-wasm-wasmtime",
 ]
 
 [workspace.package]
