@@ -6,7 +6,7 @@ use blob_core::{BindingLeaseId, ImplementationId, TaskId};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, Store};
 
-pub const RUNTIME_ID: &str = "wasmtime-component@49";
+pub const RUNTIME_ID: &str = "wasmtime-component@48";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WasmComponentCapsule {
