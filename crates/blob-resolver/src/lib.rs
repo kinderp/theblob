@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 use blob_core::{
     BindingLease, BindingLeaseId, BindingPlan, BindingPlanId, CapabilityImplementation,
-    CapabilityId, NodeFacts, RebindBoundary, RequirementGraph, RequirementRoleKind,
+    NodeFacts, RebindBoundary, RequirementGraph, RequirementRoleKind,
     ResolvedCapabilityRole, ResolutionTrace,
 };
 
