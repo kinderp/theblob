@@ -59,4 +59,7 @@ define_id!(
     RepresentationId,
     ProjectionId,
     CausalRecordId,
+    SystemSpecId,
+    SystemProfileId,
+    SystemFeatureId,
 );
