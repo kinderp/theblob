@@ -1,0 +1,11 @@
+[package]
+name = "blob-history"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Append-only causal history prototype for The Blob"
+
+[dependencies]
+blob-core = { path = "../blob-core" }
