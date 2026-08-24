@@ -75,7 +75,7 @@ jobs:
 
       - name: Build WASIp2 filesystem probe
         working-directory: runtimes/blob-wasm-wasmtime/fixtures/fs-probe
-        run: cargo build --target wasm32-wasip2 --release
+        run: cargo build --target wasm32-wasip2 --release --target-dir ../../target/wasi-fixtures
 
       - name: Test deny-by-default and explicit-grant Component runtime
         working-directory: runtimes/blob-wasm-wasmtime
