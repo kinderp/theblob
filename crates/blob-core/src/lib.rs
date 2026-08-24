@@ -9,11 +9,13 @@
 pub mod events;
 pub mod execution;
 pub mod graphics;
+pub mod history;
 pub mod ids;
 pub mod world;
 
 pub use events::*;
 pub use execution::*;
 pub use graphics::*;
+pub use history::*;
 pub use ids::*;
 pub use world::*;
