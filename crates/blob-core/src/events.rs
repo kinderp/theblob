@@ -1,4 +1,7 @@
-use crate::ids::{EventId, ImprovementProposalId, SituationId};
+use crate::ids::{
+    CapabilityId, EventId, ImprovementProposalId, KnowledgeObjectId, NodeId, SituationId, TaskId,
+    WorkspaceId,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventSource {
@@ -14,12 +17,48 @@ pub enum EventSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EventTrustClass {
+    LocalKernel,
+    TrustedLocalService,
+    TrustedFabricNode,
+    SignedUpstreamMetadata,
+    UntrustedExternal,
+    UserDeclared,
+    AiInferred,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectRef {
+    Workspace(WorkspaceId),
+    Task(TaskId),
+    KnowledgeObject(KnowledgeObjectId),
+    Node(NodeId),
+    Capability(CapabilityId),
+    PlatformSubject(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Event {
     pub id: EventId,
+    pub schema_version: u16,
     pub source: EventSource,
+    pub source_node: Option<NodeId>,
     pub kind: String,
-    pub occurred_at_unix_ms: u64,
+    pub subjects: Vec<SubjectRef>,
+    pub observed_at_unix_ms: u64,
+    pub received_at_unix_ms: u64,
+    pub source_sequence: Option<u64>,
+    pub correlation_keys: Vec<String>,
     pub attributes: Vec<(String, String)>,
+    pub trust: EventTrustClass,
+    pub provenance: Vec<String>,
+    pub causal_parent_ids: Vec<EventId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SituationWindow {
+    pub start_unix_ms: u64,
+    pub end_unix_ms: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,8 +67,13 @@ pub struct Situation {
     pub kind: String,
     pub summary: String,
     pub evidence_event_ids: Vec<EventId>,
+    pub derived_facts: Vec<(String, String)>,
+    pub subjects: Vec<SubjectRef>,
+    pub window: SituationWindow,
     pub confidence_ppm: Option<u32>,
+    pub deterministic_rule_provenance: Vec<String>,
     pub semantic_provenance: Vec<String>,
+    pub expires_at_unix_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
