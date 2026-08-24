@@ -115,6 +115,9 @@ jobs:
         working-directory: backends/blob-nix-nixos/nix/reference
         run: nix eval --raw .#nixosConfigurations.blob-pilot.config.system.build.vm.drvPath
 
+      - name: Materialize candidate through Blob non-privileged executor
+        run: cargo run -q -p blob-system-executor --example materialize_reference
+
   nixos-vm-build:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-vm-build')
     runs-on: ubuntu-latest
