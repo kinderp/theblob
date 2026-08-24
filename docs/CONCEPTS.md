@@ -67,6 +67,21 @@ Semantic interpretation of one or more events over time, e.g. “the user is lea
 ## Alfred / Situation Engine
 Event-driven nervous system. Its v0.2 pipeline intentionally separates deterministic event normalization/correlation, AI-assisted semantic Situation interpretation, deterministic policy/authorization, and subsequent plan/capability execution. AI inference does not itself grant authority.
 
+## System Technician
+Persistent AI-assisted system-engineering role that helps the user understand, diagnose, maintain and reshape The Blob. It is not a privileged authority by itself. It observes structured system state and Situations, explains problems, proposes improvements, produces candidate Workspace/SystemSpec changes, and delegates all privileged actions through deterministic policy, verification, simulation and causal history.
+
+The System Technician should behave like an always-available expert administrator while remaining understandable to non-experts. It may be reactive (answer a user request) or proactive (respond to Situations, degradation, regressions, security advisories or relevant upstream improvements).
+
+## Improvement Watch
+Proactive maintenance function associated with the System Technician. It correlates the user's actual hardware, workloads, known problems and causal history with trusted external technical information such as official kernel/driver/project documentation, release notes, security advisories and package metadata. It should suppress irrelevant update noise and surface an improvement when it can explain why it matters to this Personal World.
+
+A proposal should include provenance/direct official references where available, applicability evidence, expected benefit, risks, compatibility notes, proposed test/rollback path and required user authorization. Discovery does not itself grant permission to mutate the system.
+
+## AI Broker
+Model-agnostic routing layer used by the System Technician and other cognitive services. It selects among a small resident model, a stronger local model, a model available elsewhere in the Personal Compute Fabric, or an explicitly permitted cloud provider according to privacy policy, task quality requirements, latency, monetary cost, energy and hardware availability.
+
+The user experiences one Technician even if the underlying model changes. Model selection is an implementation binding, not an identity boundary. Cloud reasoning is never an authority boundary and receives only policy-approved Projections/minimal context.
+
 ## Knowledge Object
 Persistent user-owned object with stable identity, content/data, metadata, semantics, provenance, relations, transformations and history.
 
