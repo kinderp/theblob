@@ -51,3 +51,23 @@ jobs:
       - name: Compile Blob Native Slint renderer
         working-directory: renderers/blob-surface-slint
         run: cargo check --all-targets
+
+  wasm-component-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install runtime Rust toolchain
+        run: |
+          rustup toolchain install 1.92.0 --profile minimal
+          rustup default 1.92.0
+          rustup component add rustfmt
+
+      - name: Parse and normalize runtime formatting
+        working-directory: runtimes/blob-wasm-wasmtime
+        run: cargo fmt --all
+
+      - name: Test deny-by-default Component runtime
+        working-directory: runtimes/blob-wasm-wasmtime
+        run: cargo test
