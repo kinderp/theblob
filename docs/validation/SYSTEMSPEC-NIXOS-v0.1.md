@@ -12,6 +12,7 @@ CI must prove that:
 - translation produces an inspectable semantic-to-Nix trace;
 - unsupported semantic features are explicit errors and are never silently ignored;
 - unsupported channels are explicit errors;
-- the NixOS backend remains a materializer outside the semantic model.
+- the NixOS backend remains a materializer outside the semantic model;
+- the checkpoint remains green on top of the CI-validated Phase 2B WASIp2 explicit-grant runtime.
 
 This checkpoint does **not** yet execute `nixos-rebuild`. The next materialization slice will place the emitted module inside a reproducible NixOS flake/reference image and exercise build/test/build-vm operations.
