@@ -9,10 +9,72 @@ The first user-visible product objective is **Pilot A: Linux — Arch/Gentoo pow
 See:
 
 - [`PILOT-ROADMAP.md`](PILOT-ROADMAP.md)
+- [`BLOB-LINUX-PILOT-v0.1.md`](BLOB-LINUX-PILOT-v0.1.md)
 - [`FAILURE-LESSONS.md`](FAILURE-LESSONS.md)
 - [`adr/0018-linux-first-mainstream-compatible-pilot.md`](adr/0018-linux-first-mainstream-compatible-pilot.md)
 
 The rule is: **do not build five incomplete platform clients at once**. Each new platform must add one measurable capability while preserving the already-working pilot.
+
+## Linux Pilot implementation track — **ACTIVE**
+
+This track intentionally pulls forward a narrow subset of later architecture phases when needed to make the first Linux product real.
+
+Completed checkpoints:
+
+### LP-0 — semantic SystemSpec — done / CI validated
+
+- backend-neutral `SystemSpec v0.1` in `blob-core`;
+- Ready / AI Designed / Expert construction mode represented in the same typed model;
+- Semantic Build Profile, priorities and feature selections;
+- deterministic validation;
+- ADR-0021 freezes `SystemSpec != Nix`.
+
+### LP-1 — minimal NixOS backend — done / CI validated
+
+- deterministic `SystemSpec -> NixOS module` translation;
+- semantic-to-Nix translation trace;
+- unsupported feature/channel requests fail explicitly;
+- no raw LLM-generated Nix as canonical managed state.
+
+### LP-2 — real NixOS module evaluation — done / CI validated
+
+- Rust-generated module matches the versioned reference byte-for-byte;
+- exact validated Nixpkgs snapshot from the NixOS 26.05 stable line is pinned;
+- real NixOS module system accepts the candidate;
+- both `system.build.toplevel` and `system.build.vm` derivations evaluate.
+
+### LP-3 — real immutable VM build — done / CI validated
+
+- `system.build.vm` is materially built through Nix;
+- immutable Nix-store VM runner is produced;
+- no CI host activation occurs.
+
+### LP-4 — real VM userspace boot — done / CI validated
+
+- generated candidate boots under QEMU/KVM;
+- Linux kernel reaches systemd userspace and `multi-user.target`;
+- validation service emits `BLOB_VM_BOOT_OK` over the serial console;
+- VM powers off cleanly;
+- normal core, Slint, WASIp2 and NixOS-evaluation gates remain green.
+
+### LP-5 — bounded System Candidate Operations — active
+
+- semantic actions: `Materialize`, `BuildIsolatedVm`, `PreviewActivation`, `TestActivation`;
+- canonical effect/authority classification;
+- NixOS backend emits structured `program + argv`, never an AI shell string;
+- forged action/effect/authority combinations are rejected;
+- persistent `switch`/`boot` activation is absent from v0.1 by construction.
+
+Next Linux Pilot checkpoints:
+
+1. CI-validate LP-5;
+2. implement a non-privileged executor for `Materialize` and `BuildIsolatedVm`;
+3. return structured `SystemOperationResult` with derivation/output/evidence;
+4. connect operation results to Temporal/Causal history;
+5. expose candidate diff/explanation to the System Technician;
+6. define a dedicated NixOS physical test-node enrollment/profile;
+7. only then implement privileged `PreviewActivation`/`TestActivation` execution;
+8. persistent `boot`/`switch` requires a separate authority/rollback ADR.
 
 ## Phase 0 — Vocabulary, archaeology and contracts — **BASELINE FROZEN**
 
@@ -99,35 +161,36 @@ It also includes a read-only System Technician diagnostic slice for failed tests
 - read-only `blob-technician` crate;
 - evidence/binding explanation;
 - Suggest-only `ImprovementProposal`;
-- no executor/package-manager/SystemSpec dependency.
+- no generic privileged executor dependency.
 
-## Phase 2 — Capability Runtime — **ACTIVE**
+## Phase 2 — Capability Runtime — **ACTIVE: 2C NEXT**
 
 Goal: replace the MVP process-backed execution proof with genuinely constrained, typed and disposable Capsule runtimes while preserving the Capability/Implementation/Binding separation.
 
-### 2A — WebAssembly Component runtime — active
+### 2A — WebAssembly Component runtime — done / CI validated
 
-- use WebAssembly Component Model as the first typed portable Capsule runtime;
+- WebAssembly Component Model first typed portable Capsule runtime;
 - deny-by-default host imports;
 - no ambient filesystem/network/environment access;
-- prove that an undeclared host import prevents instantiation;
-- keep Wasmtime dependency outside the Rust 1.85 trusted semantic core;
-- first runtime adapter uses a separately versioned/toolchained workspace.
+- undeclared host import prevents instantiation;
+- Wasmtime dependency remains outside the Rust 1.85 trusted semantic core;
+- separate runtime workspace/toolchain.
 
-### 2B — WASI explicit grants
+### 2B — WASI explicit grants — done / CI validated
 
-After the deny-by-default component runtime is proven:
-
-- add WASI 0.2/WASIp2 host integration;
-- map Blob grants/Projections to explicit WASI resources;
-- preopened-directory tests;
-- stdio policy;
-- network denied unless a future explicit grant exists;
-- no ambient inheritance by default.
+- WASI 0.2/WASIp2 host integration;
+- explicit preopened filesystem grants;
+- no filesystem grant -> no workspace access;
+- read-only grant reads but cannot write;
+- read-write grant writes only inside the preopen;
+- parent traversal cannot escape the granted directory;
+- TCP/UDP/name lookup denied;
+- no ambient environment/argv/stdio inheritance;
+- guest `proc_exit` is captured as structured guest exit status, distinct from runtime failure.
 
 WASI 0.3/WASIp3 remains experimental/research until runtime/toolchain maturity justifies use in the trusted path.
 
-### 2C — Capsule metadata / provenance
+### 2C — Capsule metadata / provenance — next
 
 - content hash;
 - publisher/signature metadata;
@@ -213,16 +276,23 @@ Move from simple deterministic correlation to:
 - persistent Context;
 - policy-aware structured plans.
 
-## Phase 7 — Adaptive system + System Technician
+## Phase 7 — Adaptive system + System Technician — **PARTIALLY PULLED INTO LINUX PILOT**
 
-- declarative `SystemSpec`;
-- Nix/NixOS backend and nix-darwin/hosted-node strategy;
-- safe experiment branches;
-- simulation/VM testing;
-- benchmark/regression;
-- System Technician `ImprovementProposal` lifecycle;
+Already proven in Linux Pilot track:
+
+- declarative `SystemSpec v0.1`;
+- minimal Nix/NixOS backend;
+- isolated candidate evaluation/build/VM boot;
+- initial bounded candidate operation semantics.
+
+Still required for the full phase:
+
+- generalized Nix/NixOS backend and nix-darwin/hosted-node strategy;
+- safe experiment branches integrated with Personal World;
+- benchmark/regression framework;
+- full System Technician `ImprovementProposal` lifecycle;
 - Improvement Watch against trusted/official sources;
-- causal recording and rollback;
+- causal recording and rollback for system operations;
 - kernel/driver/build-profile experiments only behind explicit authority policy.
 
 ## Phase 8 — AI Broker
