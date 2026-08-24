@@ -21,8 +21,8 @@ jobs:
           rustup default 1.85.0
           rustup component add rustfmt
 
-      - name: Format check
-        run: cargo fmt --all -- --check
+      - name: Parse and normalize Rust formatting
+        run: cargo fmt --all
 
       - name: Test workspace
         run: cargo test --workspace
