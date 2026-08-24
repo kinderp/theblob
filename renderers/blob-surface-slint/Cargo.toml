@@ -1,0 +1,21 @@
+[package]
+name = "blob-surface-slint"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "Apache-2.0 OR MIT"
+description = "Blob Native desktop Surface renderer prototype using Slint"
+
+[workspace]
+
+[dependencies]
+slint = { version = "=1.17.1", default-features = false, features = [
+    "std",
+    "backend-winit",
+    "renderer-software",
+    "compat-1-2",
+] }
+blob-core = { path = "../../crates/blob-core" }
+blob-mvp = { path = "../../crates/blob-mvp" }
+blob-resolver = { path = "../../crates/blob-resolver" }
+blob-executor = { path = "../../crates/blob-executor" }
