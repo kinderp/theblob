@@ -1,8 +1,12 @@
 #![forbid(unsafe_code)]
 
+use std::path::PathBuf;
+
 use blob_core::{
-    FeatureState, KernelPolicy, SystemArchitecture, SystemChannel, SystemFeatureId,
-    SystemFeatureSelection, SystemSpec, SystemSpecViolation,
+    FeatureState, KernelPolicy, SystemArchitecture, SystemAuthorityClass, SystemCandidateAction,
+    SystemCandidateId, SystemCandidateOperation, SystemChannel, SystemEffectClass, SystemFeatureId,
+    SystemFeatureSelection, SystemOperationId, SystemOperationViolation, SystemSpec, SystemSpecId,
+    SystemSpecViolation,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -22,6 +26,39 @@ pub enum NixBackendError {
     InvalidSpec(Vec<SystemSpecViolation>),
     UnsupportedChannel(SystemChannel),
     UnsupportedFeature(SystemFeatureId),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NixOsCandidateTarget {
+    pub flake_path: PathBuf,
+    pub configuration: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NixOperationPlanError {
+    InvalidOperation(Vec<SystemOperationViolation>),
+    EmptyFlakePath,
+    InvalidConfigurationName,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NixCommandPlan {
+    pub operation_id: SystemOperationId,
+    pub candidate: SystemCandidateId,
+    pub system_spec: SystemSpecId,
+    pub action: SystemCandidateAction,
+    pub effect_class: SystemEffectClass,
+    pub authority: SystemAuthorityClass,
+    pub program: String,
+    pub args: Vec<String>,
+    pub expected_effects: Vec<String>,
+    pub rollback_semantics: String,
+}
+
+impl NixCommandPlan {
+    pub fn changes_live_system(&self) -> bool {
+        self.effect_class == SystemEffectClass::TemporaryLiveActivation
+    }
 }
 
 pub struct NixOsBackend;
@@ -93,6 +130,111 @@ impl NixOsBackend {
             trace,
         })
     }
+
+    pub fn plan_operation(
+        operation: &SystemCandidateOperation,
+        target: &NixOsCandidateTarget,
+    ) -> Result<NixCommandPlan, NixOperationPlanError> {
+        operation
+            .validate_policy()
+            .map_err(NixOperationPlanError::InvalidOperation)?;
+        validate_target(target)?;
+
+        let flake_selector = format!(
+            "{}#{}",
+            target.flake_path.display(),
+            target.configuration
+        );
+
+        let (program, args, expected_effects, rollback_semantics) = match operation.action {
+            SystemCandidateAction::Materialize => (
+                "nix".to_owned(),
+                vec![
+                    "build".into(),
+                    "--no-link".into(),
+                    "--print-out-paths".into(),
+                    format!(
+                        "{flake_selector}.config.system.build.toplevel"
+                    ),
+                ],
+                vec![
+                    "materialize immutable candidate closure in the Nix store".into(),
+                    "do not activate the candidate on the running host".into(),
+                ],
+                "No live-system rollback is needed because the candidate is not activated.".into(),
+            ),
+            SystemCandidateAction::BuildIsolatedVm => (
+                "nix".to_owned(),
+                vec![
+                    "build".into(),
+                    "--no-link".into(),
+                    "--print-out-paths".into(),
+                    format!("{flake_selector}.config.system.build.vm"),
+                ],
+                vec![
+                    "materialize an isolated QEMU VM candidate in the Nix store".into(),
+                    "do not activate the candidate on the running host".into(),
+                ],
+                "Discard the VM artifact/cache reference; the running host is unchanged.".into(),
+            ),
+            SystemCandidateAction::PreviewActivation => (
+                "nixos-rebuild".to_owned(),
+                vec!["dry-activate".into(), "--flake".into(), flake_selector],
+                vec![
+                    "build the candidate and calculate live activation changes".into(),
+                    "backend dry-activation hooks explicitly marked as supported may execute".into(),
+                ],
+                "No configuration switch is performed; dry-activation hooks must be captured as evidence.".into(),
+            ),
+            SystemCandidateAction::TestActivation => (
+                "nixos-rebuild".to_owned(),
+                vec!["test".into(), "--flake".into(), flake_selector],
+                vec![
+                    "build and temporarily activate the candidate on the running host".into(),
+                    "do not make the candidate the boot-default generation".into(),
+                ],
+                "Reboot returns to the previous boot-default configuration; an explicit rollback path should also be recorded before execution.".into(),
+            ),
+        };
+
+        Ok(NixCommandPlan {
+            operation_id: operation.id.clone(),
+            candidate: operation.candidate.clone(),
+            system_spec: operation.system_spec.clone(),
+            action: operation.action.clone(),
+            effect_class: operation.effect_class.clone(),
+            authority: operation.authority.clone(),
+            program,
+            args,
+            expected_effects,
+            rollback_semantics,
+        })
+    }
+}
+
+fn validate_target(target: &NixOsCandidateTarget) -> Result<(), NixOperationPlanError> {
+    if target.flake_path.as_os_str().is_empty() {
+        return Err(NixOperationPlanError::EmptyFlakePath);
+    }
+
+    if !valid_configuration_name(&target.configuration) {
+        return Err(NixOperationPlanError::InvalidConfigurationName);
+    }
+
+    Ok(())
+}
+
+fn valid_configuration_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 63 {
+        return false;
+    }
+    let bytes = name.as_bytes();
+    if bytes.first() == Some(&b'-') || bytes.last() == Some(&b'-') {
+        return false;
+    }
+    bytes
+        .iter()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
 }
 
 fn state_name(state: &FeatureState) -> &'static str {
@@ -161,6 +303,22 @@ mod tests {
         }
     }
 
+    fn target() -> NixOsCandidateTarget {
+        NixOsCandidateTarget {
+            flake_path: PathBuf::from("/var/lib/theblob/candidates/abc"),
+            configuration: "blob-pilot".into(),
+        }
+    }
+
+    fn operation(action: SystemCandidateAction) -> SystemCandidateOperation {
+        SystemCandidateOperation::new(
+            "op:one",
+            "candidate:one",
+            "system:linux-pilot",
+            action,
+        )
+    }
+
     #[test]
     fn renders_a_deterministic_nixos_module() {
         let output = NixOsBackend::translate(&spec()).expect("supported spec");
@@ -216,5 +374,106 @@ mod tests {
             NixOsBackend::translate(&candidate),
             Err(NixBackendError::InvalidSpec(_))
         ));
+    }
+
+    #[test]
+    fn materialize_plan_uses_nix_build_and_never_activates() {
+        let plan = NixOsBackend::plan_operation(
+            &operation(SystemCandidateAction::Materialize),
+            &target(),
+        )
+        .expect("valid materialize plan");
+
+        assert_eq!(plan.program, "nix");
+        assert_eq!(plan.args[0], "build");
+        assert!(plan.args.iter().all(|arg| arg != "switch" && arg != "boot"));
+        assert!(!plan.changes_live_system());
+    }
+
+    #[test]
+    fn vm_plan_targets_system_build_vm() {
+        let plan = NixOsBackend::plan_operation(
+            &operation(SystemCandidateAction::BuildIsolatedVm),
+            &target(),
+        )
+        .expect("valid VM plan");
+
+        assert_eq!(plan.program, "nix");
+        assert!(plan
+            .args
+            .last()
+            .expect("derivation selector")
+            .ends_with(".config.system.build.vm"));
+        assert!(!plan.changes_live_system());
+    }
+
+    #[test]
+    fn dry_activate_is_admin_preview_not_pure_materialization() {
+        let plan = NixOsBackend::plan_operation(
+            &operation(SystemCandidateAction::PreviewActivation),
+            &target(),
+        )
+        .expect("valid preview plan");
+
+        assert_eq!(plan.program, "nixos-rebuild");
+        assert_eq!(plan.args[0], "dry-activate");
+        assert_eq!(plan.effect_class, SystemEffectClass::PreviewHooks);
+        assert_eq!(plan.authority, SystemAuthorityClass::HostAdministrator);
+        assert!(!plan.changes_live_system());
+    }
+
+    #[test]
+    fn test_activation_is_explicit_temporary_live_change() {
+        let plan = NixOsBackend::plan_operation(
+            &operation(SystemCandidateAction::TestActivation),
+            &target(),
+        )
+        .expect("valid test plan");
+
+        assert_eq!(plan.program, "nixos-rebuild");
+        assert_eq!(plan.args[0], "test");
+        assert_eq!(plan.effect_class, SystemEffectClass::TemporaryLiveActivation);
+        assert_eq!(plan.authority, SystemAuthorityClass::HostAdministrator);
+        assert!(plan.changes_live_system());
+    }
+
+    #[test]
+    fn forged_operation_policy_is_rejected_by_backend() {
+        let mut forged = operation(SystemCandidateAction::TestActivation);
+        forged.effect_class = SystemEffectClass::MaterializationOnly;
+        forged.authority = SystemAuthorityClass::User;
+
+        assert!(matches!(
+            NixOsBackend::plan_operation(&forged, &target()),
+            Err(NixOperationPlanError::InvalidOperation(_))
+        ));
+    }
+
+    #[test]
+    fn invalid_configuration_name_is_rejected() {
+        let mut invalid = target();
+        invalid.configuration = "blob pilot; switch".into();
+
+        assert_eq!(
+            NixOsBackend::plan_operation(
+                &operation(SystemCandidateAction::Materialize),
+                &invalid
+            ),
+            Err(NixOperationPlanError::InvalidConfigurationName)
+        );
+    }
+
+    #[test]
+    fn no_v0_1_action_can_generate_persistent_activation() {
+        for action in [
+            SystemCandidateAction::Materialize,
+            SystemCandidateAction::PreviewActivation,
+            SystemCandidateAction::TestActivation,
+            SystemCandidateAction::BuildIsolatedVm,
+        ] {
+            let plan = NixOsBackend::plan_operation(&operation(action), &target())
+                .expect("all v0.1 actions should plan");
+            assert!(plan.args.iter().all(|arg| arg != "switch" && arg != "boot"));
+        }
     }
 }
