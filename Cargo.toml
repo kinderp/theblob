@@ -8,6 +8,9 @@ members = [
     "crates/blob-history",
     "crates/blob-mvp",
 ]
+exclude = [
+    "renderers/blob-surface-slint",
+]
 
 [workspace.package]
 edition = "2024"
