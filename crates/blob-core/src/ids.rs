@@ -58,4 +58,5 @@ define_id!(
     ExperienceProfileId,
     RepresentationId,
     ProjectionId,
+    CausalRecordId,
 );
