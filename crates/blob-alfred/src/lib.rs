@@ -109,3 +109,75 @@ impl CorrelationRule for SourceChangeRequiresTestRule {
         })
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TestFailedRule {
+    pub rule_version: String,
+}
+
+impl TestFailedRule {
+    pub fn v1() -> Self {
+        Self {
+            rule_version: "development.test-failed@v1".into(),
+        }
+    }
+}
+
+impl Default for TestFailedRule {
+    fn default() -> Self {
+        Self::v1()
+    }
+}
+
+impl CorrelationRule for TestFailedRule {
+    fn name(&self) -> &str {
+        &self.rule_version
+    }
+
+    fn correlate(&self, event: &Event) -> Option<Situation> {
+        if event.kind != "capability.failed" {
+            return None;
+        }
+
+        let has_task_subject = event
+            .subjects
+            .iter()
+            .any(|subject| matches!(subject, SubjectRef::Task(_)));
+        let is_test_run = event.attributes.iter().any(|(key, value)| {
+            key == "capability" && value == "test.run"
+        });
+
+        if !has_task_subject || !is_test_run {
+            return None;
+        }
+
+        let mut derived_facts = vec![("test_failed".into(), "true".into())];
+        for (key, value) in &event.attributes {
+            if matches!(key.as_str(), "exit_code" | "implementation" | "node") {
+                derived_facts.push((key.clone(), value.clone()));
+            }
+        }
+
+        Some(Situation {
+            id: SituationId::new(format!(
+                "situation:{}:{}",
+                self.rule_version,
+                event.id.as_str()
+            )),
+            kind: "development.test-failed".into(),
+            summary: "A test.run capability failed; the Development Workspace has diagnostic evidence available."
+                .into(),
+            evidence_event_ids: vec![event.id.clone()],
+            derived_facts,
+            subjects: event.subjects.clone(),
+            window: SituationWindow {
+                start_unix_ms: event.observed_at_unix_ms,
+                end_unix_ms: event.observed_at_unix_ms,
+            },
+            confidence_ppm: None,
+            deterministic_rule_provenance: vec![self.rule_version.clone()],
+            semantic_provenance: Vec::new(),
+            expires_at_unix_ms: None,
+        })
+    }
+}
