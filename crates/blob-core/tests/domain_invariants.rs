@@ -9,6 +9,28 @@ fn grammar() -> ExperienceGrammar {
     }
 }
 
+fn implementation(
+    id: &str,
+    capability: CapabilityId,
+    runtime: RuntimeKind,
+    platform: &str,
+) -> CapabilityImplementation {
+    CapabilityImplementation {
+        id: ImplementationId::from(id),
+        implements: capability,
+        runtime,
+        trusted: true,
+        supported_platforms: vec![platform.into()],
+        required_memory_bytes: 64 * 1024 * 1024,
+        required_accelerators: vec![],
+        network_required: false,
+        quality_ppm: 1_000_000,
+        expected_latency_us: 100_000,
+        expected_energy_uj: 10_000,
+        cost_microeur: 0,
+    }
+}
+
 #[test]
 fn workspace_and_task_depend_on_capability_semantics_not_implementation_identity() {
     let capability = CapabilityId::from("test.run");
@@ -37,25 +59,18 @@ fn workspace_and_task_depend_on_capability_semantics_not_implementation_identity
         requested_effects: EffectEnvelope::default(),
     };
 
-    let implementation_a = CapabilityImplementation {
-        id: ImplementationId::from("impl:test-a"),
-        implements: capability.clone(),
-        runtime: RuntimeKind::Wasm,
-        supported_platforms: vec!["linux-aarch64".into()],
-        required_memory_bytes: 64 * 1024 * 1024,
-        required_accelerators: vec![],
-        network_required: false,
-    };
-
-    let implementation_b = CapabilityImplementation {
-        id: ImplementationId::from("impl:test-b"),
-        implements: capability.clone(),
-        runtime: RuntimeKind::Oci,
-        supported_platforms: vec!["linux-x86_64".into()],
-        required_memory_bytes: 128 * 1024 * 1024,
-        required_accelerators: vec![],
-        network_required: false,
-    };
+    let implementation_a = implementation(
+        "impl:test-a",
+        capability.clone(),
+        RuntimeKind::Wasm,
+        "linux-aarch64",
+    );
+    let implementation_b = implementation(
+        "impl:test-b",
+        capability.clone(),
+        RuntimeKind::Oci,
+        "linux-x86_64",
+    );
 
     assert_eq!(workspace.baseline_capability_requirements, vec![capability.clone()]);
     assert_eq!(task.requirement_graphs, vec![RequirementGraphId::from("rg:test-1")]);
