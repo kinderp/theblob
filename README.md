@@ -8,7 +8,7 @@ The name is a cultural homage to *The Blob* (1958), in the same playful spirit w
 
 ## Current status
 
-**Phase 0 — Architecture v0.4, vocabulary, systems archaeology and deterministic resolver design.**
+**Phase 0 — Architecture v0.5, vocabulary, systems archaeology, deterministic resolver design and proactive System Technician.**
 
 We are deliberately not implementing the full system yet. The first implementation will be a small vertical slice proving the separation between semantic intent, deterministic resolution, independent verification and ephemeral capability execution.
 
@@ -63,6 +63,8 @@ Deep dives:
 - **Task** — concrete activity performed inside or across Workspaces.
 - **Intent / Goal** — desired outcome; Goals can persist over time.
 - **Alfred / Situation Engine** — event-driven nervous system correlating events into semantic Situations.
+- **System Technician** — always-available, local-first, model-agnostic AI-assisted system engineer that diagnoses, explains, proactively watches for relevant upstream improvements, prepares/test changes and never bypasses deterministic policy/verification.
+- **AI Broker** — routes reasoning among resident, local, Fabric and optional cloud models according to privacy, quality, latency, cost, energy and hardware constraints.
 - **Knowledge Object** — persistent user-owned object, independent from any application.
 - **Projection** — least-privilege typed slice of a Knowledge Object.
 - **Representation** — derived materialization such as PDF, DOCX, HTML, audio or thumbnail.
@@ -127,6 +129,7 @@ Contracts and roadmap:
 - [`docs/RESOLUTION-CONTRACT-v0.1.md`](docs/RESOLUTION-CONTRACT-v0.1.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md)
+- [`docs/SYSTEM-TECHNICIAN.md`](docs/SYSTEM-TECHNICIAN.md)
 
 ## Design rule
 
