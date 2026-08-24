@@ -80,3 +80,37 @@ jobs:
       - name: Test deny-by-default and explicit-grant Component runtime
         working-directory: runtimes/blob-wasm-wasmtime
         run: cargo test
+
+  nixos-evaluation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust core MSRV
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal
+          rustup default 1.85.0
+
+      - name: Regenerate reference NixOS module from SystemSpec
+        run: |
+          cargo run -q -p blob-nix-nixos --example render_reference > /tmp/blob-generated.nix
+          diff -u backends/blob-nix-nixos/nix/reference/generated.nix /tmp/blob-generated.nix
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Resolve NixOS 26.05 reference inputs
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: nix flake metadata
+
+      - name: Evaluate NixOS system derivation
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: nix eval --raw .#nixosConfigurations.blob-pilot.config.system.build.toplevel.drvPath
+
+      - name: Evaluate NixOS VM derivation
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: nix eval --raw .#nixosConfigurations.blob-pilot.config.system.build.vm.drvPath
