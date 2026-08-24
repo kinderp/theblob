@@ -1,5 +1,8 @@
 #![deny(unsafe_code)]
 
+mod wasi_grants;
+pub use wasi_grants::*;
+
 use std::time::Instant;
 
 use blob_core::{BindingLeaseId, ImplementationId, TaskId};
