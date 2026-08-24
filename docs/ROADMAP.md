@@ -1,5 +1,19 @@
 # Research and Engineering Roadmap
 
+## Product pilot overlay — **ACCEPTED**
+
+The engineering phases below are internal sequencing, not the order in which the project must feel complete to a user.
+
+The first user-visible product objective is **Pilot A: Linux — Arch/Gentoo power with mainstream-desktop simplicity**. Only after that experience becomes independently useful do we expand the same Personal World incrementally across a second Linux/Ubuntu node, macOS, Windows, Android and a Garmin wearable companion.
+
+See:
+
+- [`PILOT-ROADMAP.md`](PILOT-ROADMAP.md)
+- [`FAILURE-LESSONS.md`](FAILURE-LESSONS.md)
+- [`adr/0018-linux-first-mainstream-compatible-pilot.md`](adr/0018-linux-first-mainstream-compatible-pilot.md)
+
+The rule is: **do not build five incomplete platform clients at once**. Each new platform must add one measurable capability while preserving the already-working pilot.
+
 ## Phase 0 — Vocabulary, archaeology and contracts — **BASELINE FROZEN**
 
 Completed baseline:
