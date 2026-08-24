@@ -140,9 +140,10 @@ impl NixOsBackend {
             .map_err(NixOperationPlanError::InvalidOperation)?;
         validate_target(target)?;
 
-        let flake_selector = format!(
-            "{}#{}",
-            target.flake_path.display(),
+        let flake_path = target.flake_path.display();
+        let rebuild_selector = format!("{flake_path}#{}", target.configuration);
+        let nix_configuration_selector = format!(
+            "{flake_path}#nixosConfigurations.{}",
             target.configuration
         );
 
@@ -153,9 +154,7 @@ impl NixOsBackend {
                     "build".into(),
                     "--no-link".into(),
                     "--print-out-paths".into(),
-                    format!(
-                        "{flake_selector}.config.system.build.toplevel"
-                    ),
+                    format!("{nix_configuration_selector}.config.system.build.toplevel"),
                 ],
                 vec![
                     "materialize immutable candidate closure in the Nix store".into(),
@@ -169,7 +168,7 @@ impl NixOsBackend {
                     "build".into(),
                     "--no-link".into(),
                     "--print-out-paths".into(),
-                    format!("{flake_selector}.config.system.build.vm"),
+                    format!("{nix_configuration_selector}.config.system.build.vm"),
                 ],
                 vec![
                     "materialize an isolated QEMU VM candidate in the Nix store".into(),
@@ -179,7 +178,7 @@ impl NixOsBackend {
             ),
             SystemCandidateAction::PreviewActivation => (
                 "nixos-rebuild".to_owned(),
-                vec!["dry-activate".into(), "--flake".into(), flake_selector],
+                vec!["dry-activate".into(), "--flake".into(), rebuild_selector],
                 vec![
                     "build the candidate and calculate live activation changes".into(),
                     "backend dry-activation hooks explicitly marked as supported may execute".into(),
@@ -188,7 +187,7 @@ impl NixOsBackend {
             ),
             SystemCandidateAction::TestActivation => (
                 "nixos-rebuild".to_owned(),
-                vec!["test".into(), "--flake".into(), flake_selector],
+                vec!["test".into(), "--flake".into(), rebuild_selector],
                 vec![
                     "build and temporarily activate the candidate on the running host".into(),
                     "do not make the candidate the boot-default generation".into(),
@@ -377,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn materialize_plan_uses_nix_build_and_never_activates() {
+    fn materialize_plan_uses_real_nixos_flake_attribute() {
         let plan = NixOsBackend::plan_operation(
             &operation(SystemCandidateAction::Materialize),
             &target(),
@@ -386,12 +385,16 @@ mod tests {
 
         assert_eq!(plan.program, "nix");
         assert_eq!(plan.args[0], "build");
+        assert_eq!(
+            plan.args[3],
+            "/var/lib/theblob/candidates/abc#nixosConfigurations.blob-pilot.config.system.build.toplevel"
+        );
         assert!(plan.args.iter().all(|arg| arg != "switch" && arg != "boot"));
         assert!(!plan.changes_live_system());
     }
 
     #[test]
-    fn vm_plan_targets_system_build_vm() {
+    fn vm_plan_targets_real_system_build_vm_attribute() {
         let plan = NixOsBackend::plan_operation(
             &operation(SystemCandidateAction::BuildIsolatedVm),
             &target(),
@@ -399,16 +402,15 @@ mod tests {
         .expect("valid VM plan");
 
         assert_eq!(plan.program, "nix");
-        assert!(plan
-            .args
-            .last()
-            .expect("derivation selector")
-            .ends_with(".config.system.build.vm"));
+        assert_eq!(
+            plan.args[3],
+            "/var/lib/theblob/candidates/abc#nixosConfigurations.blob-pilot.config.system.build.vm"
+        );
         assert!(!plan.changes_live_system());
     }
 
     #[test]
-    fn dry_activate_is_admin_preview_not_pure_materialization() {
+    fn dry_activate_uses_nixos_rebuild_flake_selector() {
         let plan = NixOsBackend::plan_operation(
             &operation(SystemCandidateAction::PreviewActivation),
             &target(),
@@ -417,6 +419,7 @@ mod tests {
 
         assert_eq!(plan.program, "nixos-rebuild");
         assert_eq!(plan.args[0], "dry-activate");
+        assert_eq!(plan.args[2], "/var/lib/theblob/candidates/abc#blob-pilot");
         assert_eq!(plan.effect_class, SystemEffectClass::PreviewHooks);
         assert_eq!(plan.authority, SystemAuthorityClass::HostAdministrator);
         assert!(!plan.changes_live_system());
@@ -432,6 +435,7 @@ mod tests {
 
         assert_eq!(plan.program, "nixos-rebuild");
         assert_eq!(plan.args[0], "test");
+        assert_eq!(plan.args[2], "/var/lib/theblob/candidates/abc#blob-pilot");
         assert_eq!(plan.effect_class, SystemEffectClass::TemporaryLiveActivation);
         assert_eq!(plan.authority, SystemAuthorityClass::HostAdministrator);
         assert!(plan.changes_live_system());
