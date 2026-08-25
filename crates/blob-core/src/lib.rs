@@ -11,6 +11,7 @@ pub mod execution;
 pub mod graphics;
 pub mod history;
 pub mod ids;
+pub mod physical_node;
 pub mod system;
 pub mod world;
 
@@ -19,5 +20,6 @@ pub use execution::*;
 pub use graphics::*;
 pub use history::*;
 pub use ids::*;
+pub use physical_node::*;
 pub use system::*;
 pub use world::*;
