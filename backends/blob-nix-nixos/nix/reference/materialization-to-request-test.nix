@@ -271,6 +271,12 @@ in
       };
     };
 
+    # runNixOSTest normally puts the writable overlay of /nix/store on tmpfs,
+    # which intentionally discards dynamically evaluated/built store paths at
+    # reboot. Recovery must model an installed machine with a persistent writable
+    # Nix store, so place that overlay on the VM disk instead.
+    virtualisation.writableStore = true;
+    virtualisation.writableStoreUseTmpfs = false;
     virtualisation.diskSize = 12288;
     virtualisation.memorySize = 1536;
     virtualisation.cores = 2;
