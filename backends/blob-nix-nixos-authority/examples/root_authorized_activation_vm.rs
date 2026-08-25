@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,7 +15,8 @@ use blob_nix_nixos_authority::{
     StdPkcheckCommandRunner,
 };
 use blob_nix_nixos_privileged_helper::{
-    FilePrivilegedExecutionLedger, LocalNixOsActivationHost, StdPrivilegedCommandRunner,
+    FilePrivilegedExecutionLedger, LocalNixOsActivationHost, PrivilegedCommandOutcome,
+    PrivilegedCommandRunner, StdPrivilegedCommandRunner,
 };
 use blob_nix_nixos_root_boundary::{
     FileTrustedActivationPermitStore, RootOwnedNixOsActivationBoundary,
@@ -162,6 +163,37 @@ fn prepared(action: RequestedAction, candidate: &str, now_unix_ms: u64) -> Prepa
     }
 }
 
+/// Test-only diagnostic wrapper around the same production command runner.
+/// It does not alter the command, argv, environment, or result. It only exposes
+/// already-captured output when switch-to-configuration returns non-zero so the
+/// disposable VM CI can diagnose the exact NixOS failure.
+struct DiagnosticPrivilegedCommandRunner;
+
+impl PrivilegedCommandRunner for DiagnosticPrivilegedCommandRunner {
+    fn run(&self, program: &Path, argument: &str) -> Result<PrivilegedCommandOutcome, String> {
+        let outcome = StdPrivilegedCommandRunner.run(program, argument)?;
+        if !outcome.succeeded() {
+            eprintln!(
+                "BLOB_VM_SWITCH_FAILED program={} argument={} exit-code={:?}",
+                program.display(),
+                argument,
+                outcome.exit_code
+            );
+            if !outcome.stdout.is_empty() {
+                eprintln!("BLOB_VM_SWITCH_STDOUT_BEGIN");
+                eprintln!("{}", outcome.stdout.trim_end());
+                eprintln!("BLOB_VM_SWITCH_STDOUT_END");
+            }
+            if !outcome.stderr.is_empty() {
+                eprintln!("BLOB_VM_SWITCH_STDERR_BEGIN");
+                eprintln!("{}", outcome.stderr.trim_end());
+                eprintln!("BLOB_VM_SWITCH_STDERR_END");
+            }
+        }
+        Ok(outcome)
+    }
+}
+
 fn run() -> Result<(), String> {
     let args = parse_args()?;
     let now = now_unix_ms()?;
@@ -183,7 +215,7 @@ fn run() -> Result<(), String> {
     let permits = FileTrustedActivationPermitStore::production_default();
     let replay = FilePrivilegedExecutionLedger::production_default();
     let host = LocalNixOsActivationHost;
-    let runner = StdPrivilegedCommandRunner;
+    let runner = DiagnosticPrivilegedCommandRunner;
     let boundary = RootOwnedNixOsActivationBoundary::new(LOCAL_NODE);
 
     let execution = boundary
