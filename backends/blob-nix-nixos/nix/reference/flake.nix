@@ -28,6 +28,9 @@
         polkit-authority = pkgs.testers.runNixOSTest {
           imports = [ ./polkit-authority-test.nix ];
         };
+        root-dbus-ipc = pkgs.testers.runNixOSTest {
+          imports = [ ./root-dbus-ipc-test.nix ];
+        };
       };
     };
 }
