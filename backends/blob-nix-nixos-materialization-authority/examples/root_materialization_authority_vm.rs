@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use blob_core::{NodeId, SystemCandidateId, SystemOperationId, SystemSpecId};
 use blob_nix_nixos_materialization_authority::{
-    MaterializationIntentSpec, RootMaterializationAdmissionAuthority,
+    MaterializationIntentSpec, NixMaterializationInspector, RootMaterializationAdmissionAuthority,
     StdNixMaterializationInspector,
 };
 
@@ -109,12 +109,31 @@ fn run() -> Result<(), String> {
             print_intent(&intent);
         }
         Mode::Resume => {
-            // Recovery deliberately accepts only the operation id. It reloads the
-            // canonical root-owned pending intent instead of recomputing source,
-            // candidate, SystemSpec, derivation or output from caller input.
+            // The caller supplies only the operation id. Root reloads the durable
+            // identity, then re-resolves from the *persisted* immutable source and
+            // attribute. This may restore Nix's .drv representation after reboot,
+            // but recovery succeeds only if both derivation and output remain
+            // exactly equal to the identity committed at begin.
             let intent = authority
                 .load_pending(&args.operation)
                 .map_err(|error| format!("materialization resume rejected: {error:?}"))?;
+            let resolved = inspector
+                .resolve_exact_derivation(
+                    &intent.immutable_flake_root,
+                    &intent.installable_attribute,
+                )
+                .map_err(|error| format!("materialization resume inspection failed: {error}"))?;
+            if resolved.derivation_path != intent.derivation_path
+                || resolved.expected_output != intent.expected_output
+            {
+                return Err(format!(
+                    "materialization resume identity mismatch: persisted drv={} output={}, resolved drv={} output={}",
+                    intent.derivation_path.display(),
+                    intent.expected_output.display(),
+                    resolved.derivation_path.display(),
+                    resolved.expected_output.display(),
+                ));
+            }
             print_intent(&intent);
         }
         Mode::Complete => {
