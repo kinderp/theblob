@@ -1,0 +1,14 @@
+[package]
+name = "blob-system-activation-gate"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Readiness and scoped-authorization gate for privileged The Blob system activation"
+
+[dependencies]
+blob-core = { path = "../blob-core" }
+blob-nix-nixos-activation = { path = "../../backends/blob-nix-nixos-activation" }
+
+[dev-dependencies]
+blob-system-executor = { path = "../blob-system-executor" }
