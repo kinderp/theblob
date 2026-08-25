@@ -26,22 +26,28 @@ let
     '';
   };
 
-  # Deliberately avoid nixpkgs/stdenv inside the guest materialization. The
-  # builder is emitted as a Nix path value (not a quoted path string), preserving
-  # its dependency context when the guest evaluates this generated flake.
+  # Deliberately avoid nixpkgs/stdenv inside the guest materialization. BusyBox
+  # is retained explicitly in the guest store and declared as a non-flake input,
+  # so pure flake evaluation records it as a real derivation dependency instead
+  # of relying on an impure absolute host path.
   materializationFlake = pkgs.writeTextDir "flake.nix" ''
     {
-      outputs = { self }: {
+      inputs.builder = {
+        url = "path:${pkgs.busybox}";
+        flake = false;
+      };
+
+      outputs = { self, builder }: {
         packages.x86_64-linux.candidate = builtins.derivation {
           name = "blob-materialization-admission-candidate";
           system = "x86_64-linux";
-          builder = ${pkgs.busybox}/bin/sh;
+          builder = "''${builder.outPath}/bin/sh";
           args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
         };
         packages.x86_64-linux.decoy = builtins.derivation {
           name = "blob-materialization-admission-decoy";
           system = "x86_64-linux";
-          builder = ${pkgs.busybox}/bin/sh;
+          builder = "''${builder.outPath}/bin/sh";
           args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
         };
       };
@@ -59,6 +65,8 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
+    # Keep the declared local builder path available in the guest store even
+    # though network substituters are disabled.
     system.extraDependencies = [ pkgs.busybox ];
     users.users.alice = {
       isNormalUser = true;
@@ -87,6 +95,7 @@ in
     HARNESS = "${authorityHarness}/bin/blob-materialization-authority-vm"
     SOURCE = "${materializationFlake}"
     UNSAFE_SOURCE = "${unsafeSource}/ref"
+    BUILDER = "${pkgs.busybox}/bin/sh"
     NIX = "${pkgs.nix}/bin/nix"
     NIX_STORE = "${pkgs.nix}/bin/nix-store"
     OP = "op:blob-materialization-admission-vm"
@@ -124,7 +133,7 @@ in
 
     machine.start()
     machine.wait_for_unit("multi-user.target")
-    machine.succeed("test -x ${pkgs.busybox}/bin/sh")
+    machine.succeed("test -x " + shlex.quote(BUILDER))
 
     # A lexically store-local path that resolves through a symlink to /tmp is not
     # an immutable source and must be rejected before Nix evaluation.
