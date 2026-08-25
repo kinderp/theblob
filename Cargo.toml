@@ -6,6 +6,7 @@ members = [
     "crates/blob-resolver",
     "crates/blob-executor",
     "crates/blob-system-executor",
+    "crates/blob-node-probe",
     "crates/blob-history",
     "crates/blob-mvp",
     "crates/blob-technician",
