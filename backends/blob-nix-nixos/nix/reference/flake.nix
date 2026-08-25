@@ -46,6 +46,9 @@
         materialization-admission = pkgs.testers.runNixOSTest {
           imports = [ ./materialization-admission-test.nix ];
         };
+        materialization-to-request = pkgs.testers.runNixOSTest {
+          imports = [ ./materialization-to-request-test.nix ];
+        };
       };
     };
 }
