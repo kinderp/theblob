@@ -275,7 +275,7 @@ in
     LEDGER = "/var/lib/theblob/privileged-executions"
 
     def user_call(user, method):
-        inner = "busctl --system call " + DEST + " " + PATH + " " + IFACE + " " + method
+        inner = "busctl --system call " + DEST + " " + PATH + " " + IFACE + " " + method + " 2>&1"
         return machine.execute("su -s /bin/sh " + user + " -c " + shlex.quote(inner))
 
     def ledger_count():
