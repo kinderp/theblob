@@ -43,6 +43,9 @@
             ./root-request-publisher-writable-store.nix
           ];
         };
+        materialization-admission = pkgs.testers.runNixOSTest {
+          imports = [ ./materialization-admission-test.nix ];
+        };
       };
     };
 }
