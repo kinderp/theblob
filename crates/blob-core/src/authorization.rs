@@ -1,7 +1,13 @@
 use crate::{
-    NodeId, SystemAuthorityClass, SystemAuthorizationId, SystemCandidateAction, SystemCandidateId,
+    NodeId, PhysicalNodeSubstrate, PhysicalTestNodeReadiness, SystemArchitecture,
+    SystemAuthorityClass, SystemAuthorizationId, SystemCandidateAction, SystemCandidateId,
     SystemCandidateOperation, SystemOperationId, SystemSpecId,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SystemAuthorizationUsePolicy {
+    SingleUse,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemOperationAuthorization {
@@ -12,6 +18,9 @@ pub struct SystemOperationAuthorization {
     pub node: NodeId,
     pub action: SystemCandidateAction,
     pub authority: SystemAuthorityClass,
+    /// Binds authorization to the exact readiness snapshot reviewed before approval.
+    pub readiness_observed_at_unix_ms: u64,
+    pub use_policy: SystemAuthorizationUsePolicy,
     pub granted_by: String,
     pub reason: String,
     pub granted_at_unix_ms: u64,
@@ -22,7 +31,7 @@ impl SystemOperationAuthorization {
     pub fn validate_for(
         &self,
         operation: &SystemCandidateOperation,
-        node: &NodeId,
+        readiness: &PhysicalTestNodeReadiness,
         now_unix_ms: u64,
     ) -> Result<(), Vec<SystemAuthorizationViolation>> {
         let mut violations = Vec::new();
@@ -36,8 +45,11 @@ impl SystemOperationAuthorization {
         if self.system_spec != operation.system_spec {
             violations.push(SystemAuthorizationViolation::SystemSpecMismatch);
         }
-        if &self.node != node {
+        if self.node != readiness.node {
             violations.push(SystemAuthorizationViolation::NodeMismatch);
+        }
+        if self.readiness_observed_at_unix_ms != readiness.observed_at_unix_ms {
+            violations.push(SystemAuthorizationViolation::ReadinessSnapshotMismatch);
         }
         if self.action != operation.action {
             violations.push(SystemAuthorizationViolation::ActionMismatch);
@@ -56,6 +68,9 @@ impl SystemOperationAuthorization {
         }
         if self.reason.trim().is_empty() {
             violations.push(SystemAuthorizationViolation::MissingReason);
+        }
+        if self.granted_at_unix_ms < self.readiness_observed_at_unix_ms {
+            violations.push(SystemAuthorizationViolation::GrantedBeforeReadiness);
         }
         if self.expires_at_unix_ms <= self.granted_at_unix_ms {
             violations.push(SystemAuthorizationViolation::InvalidExpiryWindow);
@@ -83,6 +98,11 @@ impl SystemOperationAuthorization {
             format!("node:{}", self.node),
             format!("action:{:?}", self.action),
             format!("authority:{:?}", self.authority),
+            format!(
+                "readiness-observed-at-unix-ms:{}",
+                self.readiness_observed_at_unix_ms
+            ),
+            format!("use-policy:{:?}", self.use_policy),
             format!("granted-by:{}", self.granted_by),
             format!("reason:{}", self.reason),
             format!("granted-at-unix-ms:{}", self.granted_at_unix_ms),
@@ -97,6 +117,7 @@ pub enum SystemAuthorizationViolation {
     CandidateMismatch,
     SystemSpecMismatch,
     NodeMismatch,
+    ReadinessSnapshotMismatch,
     ActionMismatch,
     AuthorityMismatch {
         required: SystemAuthorityClass,
@@ -105,6 +126,7 @@ pub enum SystemAuthorizationViolation {
     OperationDoesNotRequireHostAdministrator,
     MissingGrantor,
     MissingReason,
+    GrantedBeforeReadiness,
     InvalidExpiryWindow,
     NotYetValid,
     Expired,
@@ -123,6 +145,23 @@ mod tests {
         )
     }
 
+    fn readiness(observed_at_unix_ms: u64) -> PhysicalTestNodeReadiness {
+        PhysicalTestNodeReadiness {
+            node: NodeId::from("node:lab"),
+            observed_architecture: SystemArchitecture::X86_64,
+            observed_substrate: PhysicalNodeSubstrate::NixOs,
+            enrolled: true,
+            trusted: true,
+            on_external_power: true,
+            free_space_bytes: 16 * 1024 * 1024 * 1024,
+            storage_health_ok: true,
+            current_boot_generation: Some("nixos-generation:42".into()),
+            rollback_reference: Some("nixos-generation:42".into()),
+            local_console_recovery_confirmed: true,
+            observed_at_unix_ms,
+        }
+    }
+
     fn authorization(action: SystemCandidateAction) -> SystemOperationAuthorization {
         SystemOperationAuthorization {
             id: SystemAuthorizationId::from("auth:one"),
@@ -132,6 +171,8 @@ mod tests {
             node: NodeId::from("node:lab"),
             action,
             authority: SystemAuthorityClass::HostAdministrator,
+            readiness_observed_at_unix_ms: 900,
+            use_policy: SystemAuthorizationUsePolicy::SingleUse,
             granted_by: "user:owner".into(),
             reason: "Approve this bounded physical-node experiment after reviewing preflight."
                 .into(),
@@ -146,7 +187,7 @@ mod tests {
         assert_eq!(
             authorization(SystemCandidateAction::TestActivation).validate_for(
                 &operation,
-                &NodeId::from("node:lab"),
+                &readiness(900),
                 30_000,
             ),
             Ok(())
@@ -157,7 +198,7 @@ mod tests {
     fn preview_authorization_cannot_be_reused_for_test_activation() {
         let operation = operation(SystemCandidateAction::TestActivation);
         let violations = authorization(SystemCandidateAction::PreviewActivation)
-            .validate_for(&operation, &NodeId::from("node:lab"), 30_000)
+            .validate_for(&operation, &readiness(900), 30_000)
             .expect_err("action mismatch must reject authorization reuse");
         assert!(violations.contains(&SystemAuthorizationViolation::ActionMismatch));
     }
@@ -165,10 +206,21 @@ mod tests {
     #[test]
     fn authorization_cannot_be_reused_on_another_node() {
         let operation = operation(SystemCandidateAction::TestActivation);
+        let mut other_readiness = readiness(900);
+        other_readiness.node = NodeId::from("node:other");
         let violations = authorization(SystemCandidateAction::TestActivation)
-            .validate_for(&operation, &NodeId::from("node:other"), 30_000)
+            .validate_for(&operation, &other_readiness, 30_000)
             .expect_err("node mismatch must reject authorization reuse");
         assert!(violations.contains(&SystemAuthorizationViolation::NodeMismatch));
+    }
+
+    #[test]
+    fn authorization_cannot_be_reused_after_new_readiness_probe() {
+        let operation = operation(SystemCandidateAction::TestActivation);
+        let violations = authorization(SystemCandidateAction::TestActivation)
+            .validate_for(&operation, &readiness(901), 30_000)
+            .expect_err("new readiness snapshot requires new authorization");
+        assert!(violations.contains(&SystemAuthorizationViolation::ReadinessSnapshotMismatch));
     }
 
     #[test]
@@ -176,7 +228,7 @@ mod tests {
         let mut operation = operation(SystemCandidateAction::TestActivation);
         operation.candidate = SystemCandidateId::from("candidate:two");
         let violations = authorization(SystemCandidateAction::TestActivation)
-            .validate_for(&operation, &NodeId::from("node:lab"), 30_000)
+            .validate_for(&operation, &readiness(900), 30_000)
             .expect_err("candidate mismatch must reject authorization reuse");
         assert!(violations.contains(&SystemAuthorizationViolation::CandidateMismatch));
     }
@@ -185,7 +237,7 @@ mod tests {
     fn expired_authorization_is_rejected() {
         let operation = operation(SystemCandidateAction::TestActivation);
         let violations = authorization(SystemCandidateAction::TestActivation)
-            .validate_for(&operation, &NodeId::from("node:lab"), 61_000)
+            .validate_for(&operation, &readiness(900), 61_000)
             .expect_err("expired authorization must be rejected");
         assert!(violations.contains(&SystemAuthorizationViolation::Expired));
     }
@@ -194,16 +246,27 @@ mod tests {
     fn future_authorization_is_rejected_until_its_issue_time() {
         let operation = operation(SystemCandidateAction::TestActivation);
         let violations = authorization(SystemCandidateAction::TestActivation)
-            .validate_for(&operation, &NodeId::from("node:lab"), 999)
+            .validate_for(&operation, &readiness(900), 999)
             .expect_err("future authorization must be rejected");
         assert!(violations.contains(&SystemAuthorizationViolation::NotYetValid));
+    }
+
+    #[test]
+    fn receipt_granted_before_reviewed_readiness_is_rejected() {
+        let operation = operation(SystemCandidateAction::TestActivation);
+        let mut receipt = authorization(SystemCandidateAction::TestActivation);
+        receipt.readiness_observed_at_unix_ms = 1_001;
+        let violations = receipt
+            .validate_for(&operation, &readiness(1_001), 30_000)
+            .expect_err("approval must follow the reviewed readiness snapshot");
+        assert!(violations.contains(&SystemAuthorizationViolation::GrantedBeforeReadiness));
     }
 
     #[test]
     fn user_level_materialization_does_not_accept_admin_receipt_as_authority_shortcut() {
         let operation = operation(SystemCandidateAction::Materialize);
         let violations = authorization(SystemCandidateAction::Materialize)
-            .validate_for(&operation, &NodeId::from("node:lab"), 30_000)
+            .validate_for(&operation, &readiness(900), 30_000)
             .expect_err("admin receipt is only modeled for privileged operations");
         assert!(violations.iter().any(|violation| matches!(
             violation,
@@ -222,7 +285,7 @@ mod tests {
         receipt.reason.clear();
 
         let violations = receipt
-            .validate_for(&operation, &NodeId::from("node:lab"), 30_000)
+            .validate_for(&operation, &readiness(900), 30_000)
             .expect_err("authorization provenance is required");
         assert!(violations.contains(&SystemAuthorizationViolation::MissingGrantor));
         assert!(violations.contains(&SystemAuthorizationViolation::MissingReason));
