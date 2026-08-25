@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for validation in a disposable NixOS VM. Physical-node execution remains disabled.
+Validated in a disposable NixOS VM. Physical-node execution remains disabled.
 
 ## Context
 
@@ -27,6 +27,8 @@ Before a non-privileged build starts, root receives a materialization identity c
 - immutable flake root already located under `/nix/store/...`;
 - bounded installable attribute.
 
+The flake root must be canonical as supplied: root resolves it with the host filesystem and rejects it if canonicalization changes the path or escapes the immutable Nix store object. A lexically store-local subpath that traverses a symlink outside `/nix/store` is therefore rejected before Nix evaluation.
+
 Root independently resolves the exact derivation and its `out` output with Nix and persists a canonical mode-0600 intent containing both:
 
 - the `.drv` path;
@@ -37,6 +39,8 @@ The resulting build target is the derivation output (`<drv>^out`).
 ### Non-privileged realization
 
 The actual build may be performed by an ordinary user. That process can realize the already selected derivation, but it cannot alter the root-owned intent and cannot nominate the path that root will later admit.
+
+The VM proof performs this realization with substituters disabled and a pure flake evaluation. Its minimal fixture uses a declared static local builder input only to keep the test hermetic; the architectural property being proved is that the normal user realizes the exact `.drv` root committed to beforehand.
 
 ### Complete
 
@@ -55,22 +59,25 @@ The pending intent is then moved atomically to the completed state. Completed op
 
 Materialization intents and admissions are stored below root-owned mode-0700 directories. Individual records are root-owned mode-0600 ordinary files. Symlinks, permissive modes, malformed records and non-canonical serialization fail closed.
 
-The immutable flake root must be a canonical subpath of `/nix/store`. The installable attribute is syntactically bounded and is persisted before build execution.
+The immutable flake root must be both lexically store-local and filesystem-canonical. The installable attribute is syntactically bounded and is persisted before build execution.
 
-## Required proof
+## Validated proof
 
-The disposable KVM test must prove:
+The disposable KVM test proves all of the following:
 
-1. root resolves and persists a concrete `.drv` and exact expected output before realization;
-2. the pending intent is root-owned mode 0600 and unreadable by the normal materializer user;
-3. completion before realization fails and does not build the missing output as a side effect;
-4. an ordinary non-root user can realize exactly the root-selected `<drv>^out` target;
-5. completion accepts only the operation id and admits the precomputed expected output;
-6. admission provenance records immutable source, installable attribute, derivation, expected output, verified deriver and NAR hash;
-7. the resulting admission is root-owned mode 0600 and unreadable by the normal user;
-8. the pending intent becomes completed after admission;
-9. a separately realizable decoy derivation cannot substitute its output for the committed operation;
-10. replaying a completed operation cannot create or mutate another admission.
+1. a store-local path that resolves through a symlink outside the store is rejected before Nix evaluation;
+2. root resolves and persists a concrete `.drv` and exact expected output before realization;
+3. the pending intent is root-owned mode 0600 and unreadable by the normal materializer user;
+4. completion before realization fails, leaves the output absent and creates no admission, proving completion is verification-only;
+5. an ordinary non-root user realizes exactly the root-selected `<drv>^out` target;
+6. completion accepts only the operation id and admits the precomputed expected output;
+7. admission provenance records immutable source, installable attribute, derivation, expected output, verified deriver and NAR hash;
+8. the resulting admission is root-owned mode 0600 and unreadable by the normal user;
+9. the pending intent becomes completed after admission;
+10. a separately realizable decoy derivation cannot substitute its output for the committed operation;
+11. replaying a completed operation cannot create or mutate another admission.
+
+The dedicated `materialization-admission` NixOS KVM check passed with network substituters disabled.
 
 ## Safety boundary
 
@@ -88,6 +95,6 @@ It also does not yet define the final production transport by which the control 
 
 ## Consequence
 
-Once this checkpoint is green, the materialization-to-admission-to-request-to-execution chain has an end-to-end immutable closure provenance story: root commits to the derivation before a non-root build, independently verifies the realized output, and all later privileged stages consume that root-owned identity rather than caller-supplied paths.
+The materialization-to-admission boundary now has a validated immutable provenance rule: root commits to the exact derivation and expected output before a non-root build, independently verifies the realized output, and publishes only that precommitted identity for downstream privileged stages.
 
-The next work should compose this admission authority directly with the ADR-0034 publisher in one KVM proof and define recovery for materializations that are pending across daemon or machine restart before any physical hardware enablement is reconsidered.
+The next work should compose this authority directly with the ADR-0034 publisher in one KVM proof and define recovery for materializations that remain pending across daemon or machine restart. Only after that composition and recovery checkpoint is green should physical-hardware enablement be reconsidered.
