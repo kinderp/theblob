@@ -41,6 +41,11 @@ let
       };
     }
   '';
+
+  unsafeSource = pkgs.runCommand "blob-materialization-symlink-source" { } ''
+    mkdir -p "$out"
+    ln -s /tmp "$out/ref"
+  '';
 in
 {
   name = "blob-materialization-admission";
@@ -72,20 +77,21 @@ in
 
     HARNESS = "${authorityHarness}/bin/blob-materialization-authority-vm"
     SOURCE = "${materializationFlake}"
+    UNSAFE_SOURCE = "${unsafeSource}/ref"
     NIX = "${pkgs.nix}/bin/nix"
     NIX_STORE = "${pkgs.nix}/bin/nix-store"
     OP = "op:blob-materialization-admission-vm"
     CANDIDATE = "candidate:blob-materialization-admission-vm"
     SYSTEM_SPEC = "system:blob-materialization-admission-vm"
 
-    def root_begin(operation=OP, attribute="packages.x86_64-linux.candidate"):
+    def root_begin(operation=OP, attribute="packages.x86_64-linux.candidate", source=SOURCE):
         return machine.execute(
             HARNESS
             + " --mode begin"
             + " --operation " + shlex.quote(operation)
             + " --candidate " + shlex.quote(CANDIDATE)
             + " --system-spec " + shlex.quote(SYSTEM_SPEC)
-            + " --source " + shlex.quote(SOURCE)
+            + " --source " + shlex.quote(source)
             + " --attribute " + shlex.quote(attribute)
             + " --nix " + shlex.quote(NIX)
             + " --nix-store " + shlex.quote(NIX_STORE)
@@ -107,6 +113,16 @@ in
 
     machine.start()
     machine.wait_for_unit("multi-user.target")
+
+    # A lexically store-local path that resolves through a symlink to /tmp is not
+    # an immutable source and must be rejected before Nix evaluation.
+    status, unsafe_output = root_begin(
+        operation="op:blob-materialization-symlink-source",
+        source=UNSAFE_SOURCE,
+    )
+    assert status != 0, (status, unsafe_output)
+    assert "InvalidImmutableFlakeRoot" in unsafe_output or "immutable" in unsafe_output.lower(), unsafe_output
+    machine.succeed("test -z \"$(find /var/lib/theblob/materialization-intents/pending -maxdepth 1 -type f -print -quit)\"")
 
     status, begin_output = root_begin()
     assert status == 0, (status, begin_output)
