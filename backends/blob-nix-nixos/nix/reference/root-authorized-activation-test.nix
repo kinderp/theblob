@@ -249,6 +249,10 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "dbus.service" "polkit.service" "systemd-tmpfiles-setup.service" ];
       requires = [ "dbus.service" "polkit.service" ];
+      # The privileged authority must not be restarted by the very temporary
+      # activation transaction it is supervising. A controlled daemon upgrade
+      # belongs to a separate handoff/reboot boundary, not this in-flight call.
+      restartIfChanged = false;
       serviceConfig = {
         Type = "simple";
         User = "root";
