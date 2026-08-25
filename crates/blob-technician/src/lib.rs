@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 
 use blob_core::{
-    BindingPlan, CausalKind, CausalRecord, ImprovementProposal, ImprovementProposalId, Situation,
-    Task, TaskState, TechnicianAutonomy,
+    BindingPlan, CausalKind, CausalRecord, ImprovementProposal, ImprovementProposalId,
+    PhysicalTestNodeProfile, PhysicalTestNodeReadiness, PhysicalTestNodeViolation, Situation,
+    SystemCandidateAction, Task, TaskState, TechnicianAutonomy,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,6 +27,19 @@ pub struct SystemChangeReport {
     pub actual_effects: Vec<String>,
     pub authorization: Option<String>,
     pub rollback_reference: Option<String>,
+    pub safety_notes: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PhysicalNodePreflightReport {
+    pub title: String,
+    pub action: SystemCandidateAction,
+    pub eligible: bool,
+    pub summary: String,
+    pub evidence: Vec<String>,
+    pub blocking_reasons: Vec<String>,
+    pub probe_warnings: Vec<String>,
+    pub next_steps: Vec<String>,
     pub safety_notes: Vec<String>,
 }
 
@@ -137,7 +151,9 @@ impl ReadOnlySystemTechnician {
     /// dependency or authority. This is deliberately backend-neutral: NixOS,
     /// macOS, Windows or future substrates can all publish `SystemChange` causal
     /// records and reuse this explanation path.
-    pub fn explain_system_change(record: &CausalRecord) -> Result<SystemChangeReport, TechnicianError> {
+    pub fn explain_system_change(
+        record: &CausalRecord,
+    ) -> Result<SystemChangeReport, TechnicianError> {
         if record.kind != CausalKind::SystemChange {
             return Err(TechnicianError::UnsupportedCausalKind(record.kind.clone()));
         }
@@ -176,11 +192,174 @@ impl ReadOnlySystemTechnician {
             safety_notes,
         })
     }
+
+    /// Explain the deterministic physical-node readiness gate. The Technician
+    /// does not create or override readiness evidence and passing this report is
+    /// explicitly not equivalent to granting administrator authority.
+    pub fn explain_physical_node_preflight(
+        profile: &PhysicalTestNodeProfile,
+        readiness: &PhysicalTestNodeReadiness,
+        action: SystemCandidateAction,
+        probe_warnings: &[String],
+    ) -> PhysicalNodePreflightReport {
+        let blocking_reasons = match profile.validate_readiness(&action, readiness) {
+            Ok(()) => Vec::new(),
+            Err(violations) => violations
+                .iter()
+                .map(physical_violation_explanation)
+                .collect(),
+        };
+        let eligible = blocking_reasons.is_empty();
+
+        let summary = if eligible {
+            eligible_summary(&action)
+        } else {
+            format!(
+                "The node is not ready for {:?}: {} deterministic prerequisite(s) are unsatisfied.",
+                action,
+                blocking_reasons.len()
+            )
+        };
+
+        let next_steps = if eligible {
+            eligible_next_steps(&action)
+        } else {
+            vec![
+                "Resolve the blocking prerequisites and collect a fresh readiness observation."
+                    .into(),
+                "Do not bypass a failed readiness gate with an AI judgement or ad-hoc privileged shell command."
+                    .into(),
+            ]
+        };
+
+        let mut safety_notes = vec![
+            "This preflight is read-only: it does not execute the requested system action."
+                .into(),
+            "Readiness eligibility is separate from authorization; administrator authority is still required for privileged actions."
+                .into(),
+            "Persistent boot/switch activation is outside the current Linux Pilot authority model."
+                .into(),
+        ];
+        if !probe_warnings.is_empty() {
+            safety_notes.push(
+                "Probe warnings are preserved as uncertainty and are not silently treated as satisfied safety facts."
+                    .into(),
+            );
+        }
+
+        PhysicalNodePreflightReport {
+            title: format!("Physical node preflight for {:?}", action),
+            action,
+            eligible,
+            summary,
+            evidence: readiness.evidence_lines(),
+            blocking_reasons,
+            probe_warnings: probe_warnings.to_vec(),
+            next_steps,
+            safety_notes,
+        }
+    }
+}
+
+fn physical_violation_explanation(violation: &PhysicalTestNodeViolation) -> String {
+    match violation {
+        PhysicalTestNodeViolation::NodeMismatch => {
+            "The readiness evidence belongs to a different enrolled node.".into()
+        }
+        PhysicalTestNodeViolation::ArchitectureMismatch => {
+            "The observed CPU architecture does not match the physical test-node profile.".into()
+        }
+        PhysicalTestNodeViolation::SubstrateMismatch => {
+            "The observed operating-system substrate does not match the physical test-node profile."
+                .into()
+        }
+        PhysicalTestNodeViolation::NotEnrolled => {
+            "The machine has not been enrolled as a physical test node.".into()
+        }
+        PhysicalTestNodeViolation::NotTrusted => {
+            "The machine enrollment is not trusted for system experimentation.".into()
+        }
+        PhysicalTestNodeViolation::StorageHealthNotConfirmed => {
+            "Storage health has not been confirmed.".into()
+        }
+        PhysicalTestNodeViolation::InsufficientFreeSpace {
+            required_bytes,
+            observed_bytes,
+        } => format!(
+            "Insufficient free storage: at least {required_bytes} bytes are required, but {observed_bytes} bytes were observed."
+        ),
+        PhysicalTestNodeViolation::PreviewActivationDisabled => {
+            "Preview activation is disabled by the physical test-node profile.".into()
+        }
+        PhysicalTestNodeViolation::TestActivationDisabled => {
+            "Temporary live test activation is disabled by the physical test-node profile.".into()
+        }
+        PhysicalTestNodeViolation::ExternalPowerRequired => {
+            "External power has not been confirmed for temporary live activation.".into()
+        }
+        PhysicalTestNodeViolation::LocalConsoleRecoveryNotConfirmed => {
+            "Local-console recovery has not been physically confirmed.".into()
+        }
+        PhysicalTestNodeViolation::CurrentBootGenerationUnknown => {
+            "The current boot-default generation is unknown.".into()
+        }
+        PhysicalTestNodeViolation::RollbackReferenceMissing => {
+            "No explicit rollback reference is recorded for the current boot-default state.".into()
+        }
+    }
+}
+
+fn eligible_summary(action: &SystemCandidateAction) -> String {
+    match action {
+        SystemCandidateAction::Materialize => {
+            "The node is ready to materialize the candidate without changing the live system.".into()
+        }
+        SystemCandidateAction::BuildIsolatedVm => {
+            "The node is ready to build an isolated VM candidate without changing the live system.".into()
+        }
+        SystemCandidateAction::PreviewActivation => {
+            "The node satisfies the readiness prerequisites for an administrator-authorized activation preview."
+                .into()
+        }
+        SystemCandidateAction::TestActivation => {
+            "The node satisfies the readiness prerequisites for an administrator-authorized temporary live test activation."
+                .into()
+        }
+    }
+}
+
+fn eligible_next_steps(action: &SystemCandidateAction) -> Vec<String> {
+    match action {
+        SystemCandidateAction::Materialize => vec![
+            "Use the bounded non-privileged materialization executor and record the result as causal evidence."
+                .into(),
+        ],
+        SystemCandidateAction::BuildIsolatedVm => vec![
+            "Build and boot the isolated candidate before considering any physical activation."
+                .into(),
+        ],
+        SystemCandidateAction::PreviewActivation => vec![
+            "Request explicit host-administrator authorization before executing the preview."
+                .into(),
+            "Capture any dry-activation hook effects as evidence; do not infer that preview equals test activation."
+                .into(),
+        ],
+        SystemCandidateAction::TestActivation => vec![
+            "Request explicit host-administrator authorization before temporary live activation."
+                .into(),
+            "Keep the recorded rollback reference and local console available throughout the test."
+                .into(),
+            "Do not make the candidate the persistent boot default under the current v0.1 policy."
+                .into(),
+        ],
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use blob_core::{CausalRecordId, CausalKind};
+    use blob_core::{
+        CausalKind, CausalRecordId, NodeId, PhysicalNodeSubstrate, SystemArchitecture,
+    };
 
     use super::*;
 
@@ -211,6 +390,27 @@ mod tests {
         }
     }
 
+    fn physical_profile() -> PhysicalTestNodeProfile {
+        PhysicalTestNodeProfile::nixos_pilot("node:lab", SystemArchitecture::X86_64)
+    }
+
+    fn physical_readiness() -> PhysicalTestNodeReadiness {
+        PhysicalTestNodeReadiness {
+            node: NodeId::from("node:lab"),
+            observed_architecture: SystemArchitecture::X86_64,
+            observed_substrate: PhysicalNodeSubstrate::NixOs,
+            enrolled: true,
+            trusted: true,
+            on_external_power: true,
+            free_space_bytes: 16 * 1024 * 1024 * 1024,
+            storage_health_ok: true,
+            current_boot_generation: Some("nixos-generation:42".into()),
+            rollback_reference: Some("nixos-generation:42".into()),
+            local_console_recovery_confirmed: true,
+            observed_at_unix_ms: 1,
+        }
+    }
+
     #[test]
     fn explains_materialization_without_backend_dependency() {
         let report = ReadOnlySystemTechnician::explain_system_change(&system_change_record())
@@ -221,9 +421,10 @@ mod tests {
             .evidence
             .iter()
             .any(|line| line.contains("/nix/store/abc-system")));
-        assert!(report.safety_notes.iter().any(|note| {
-            note.contains("did not change the live system")
-        }));
+        assert!(report
+            .safety_notes
+            .iter()
+            .any(|note| note.contains("did not change the live system")));
         assert!(report.rollback_reference.is_none());
     }
 
@@ -238,5 +439,67 @@ mod tests {
                 CausalKind::TaskTransition
             ))
         );
+    }
+
+    #[test]
+    fn preflight_explains_why_live_activation_is_blocked() {
+        let mut readiness = physical_readiness();
+        readiness.on_external_power = false;
+        readiness.rollback_reference = None;
+
+        let report = ReadOnlySystemTechnician::explain_physical_node_preflight(
+            &physical_profile(),
+            &readiness,
+            SystemCandidateAction::TestActivation,
+            &["power-state-unavailable".into()],
+        );
+
+        assert!(!report.eligible);
+        assert!(report
+            .blocking_reasons
+            .iter()
+            .any(|reason| reason.contains("External power")));
+        assert!(report
+            .blocking_reasons
+            .iter()
+            .any(|reason| reason.contains("rollback reference")));
+        assert_eq!(report.probe_warnings, vec!["power-state-unavailable"]);
+    }
+
+    #[test]
+    fn materialization_preflight_does_not_demand_live_recovery_facts() {
+        let mut readiness = physical_readiness();
+        readiness.on_external_power = false;
+        readiness.current_boot_generation = None;
+        readiness.rollback_reference = None;
+        readiness.local_console_recovery_confirmed = false;
+
+        let report = ReadOnlySystemTechnician::explain_physical_node_preflight(
+            &physical_profile(),
+            &readiness,
+            SystemCandidateAction::Materialize,
+            &[],
+        );
+
+        assert!(report.eligible);
+        assert!(report.summary.contains("without changing the live system"));
+    }
+
+    #[test]
+    fn passing_live_preflight_is_not_described_as_authorization() {
+        let report = ReadOnlySystemTechnician::explain_physical_node_preflight(
+            &physical_profile(),
+            &physical_readiness(),
+            SystemCandidateAction::TestActivation,
+            &[],
+        );
+
+        assert!(report.eligible);
+        assert!(report
+            .summary
+            .contains("administrator-authorized temporary live test activation"));
+        assert!(report.safety_notes.iter().any(|note| {
+            note.contains("separate from authorization")
+        }));
     }
 }
