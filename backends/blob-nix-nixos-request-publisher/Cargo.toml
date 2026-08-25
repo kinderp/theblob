@@ -1,0 +1,15 @@
+[package]
+name = "blob-nix-nixos-request-publisher"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Root-owned publisher for prepared NixOS activation requests from admitted materializations"
+
+[dependencies]
+blob-core = { path = "../../crates/blob-core" }
+blob-node-probe = { path = "../../crates/blob-node-probe" }
+blob-nix-nixos-activation = { path = "../blob-nix-nixos-activation" }
+blob-nix-nixos-authority = { path = "../blob-nix-nixos-authority" }
+blob-nix-nixos-request-store = { path = "../blob-nix-nixos-request-store" }
+blob-system-activation-gate = { path = "../../crates/blob-system-activation-gate" }
