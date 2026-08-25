@@ -15,6 +15,7 @@ const LOCAL_NODE: &str = "node:blob-prepared-request-daemon-vm";
 
 enum Mode {
     Begin,
+    Resume,
     Complete,
 }
 
@@ -50,6 +51,7 @@ fn parse_args() -> Result<Args, String> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     let mode = match value(&args, "--mode")?.as_str() {
         "begin" => Mode::Begin,
+        "resume" => Mode::Resume,
         "complete" => Mode::Complete,
         other => return Err(format!("unsupported mode: {other}")),
     };
@@ -70,6 +72,13 @@ fn now_unix_ms() -> Result<u64, String> {
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("system clock before UNIX epoch: {error}"))?;
     u64::try_from(elapsed.as_millis()).map_err(|_| "system clock overflow".to_owned())
+}
+
+fn print_intent(intent: &blob_nix_nixos_materialization_authority::MaterializationIntent) {
+    println!("operation={}", intent.materialization_operation);
+    println!("derivation={}", intent.derivation_path.display());
+    println!("expected-output={}", intent.expected_output.display());
+    println!("build-target={}", intent.build_target());
 }
 
 fn run() -> Result<(), String> {
@@ -97,10 +106,16 @@ fn run() -> Result<(), String> {
                     &inspector,
                 )
                 .map_err(|error| format!("materialization begin rejected: {error:?}"))?;
-            println!("operation={}", intent.materialization_operation);
-            println!("derivation={}", intent.derivation_path.display());
-            println!("expected-output={}", intent.expected_output.display());
-            println!("build-target={}", intent.build_target());
+            print_intent(&intent);
+        }
+        Mode::Resume => {
+            // Recovery deliberately accepts only the operation id. It reloads the
+            // canonical root-owned pending intent instead of recomputing source,
+            // candidate, SystemSpec, derivation or output from caller input.
+            let intent = authority
+                .load_pending(&args.operation)
+                .map_err(|error| format!("materialization resume rejected: {error:?}"))?;
+            print_intent(&intent);
         }
         Mode::Complete => {
             let admission = authority
