@@ -99,7 +99,7 @@ impl ImmutableNixOsActivationPlanner {
             return Err(ImmutableActivationError::SystemSpecMismatch);
         }
 
-        let (arg, expected_effects, rollback_semantics) = match operation.action {
+        let (arg, expected_effects, rollback_semantics) = match &operation.action {
             SystemCandidateAction::PreviewActivation => (
                 "dry-activate",
                 vec![
@@ -122,7 +122,9 @@ impl ImmutableNixOsActivationPlanner {
                 "A reboot returns to the previously recorded boot-default generation; the physical-node readiness record must carry that rollback reference."
                     .into(),
             ),
-            other => return Err(ImmutableActivationError::UnsupportedAction(other)),
+            other => {
+                return Err(ImmutableActivationError::UnsupportedAction(other.clone()));
+            }
         };
 
         let program = format!(
