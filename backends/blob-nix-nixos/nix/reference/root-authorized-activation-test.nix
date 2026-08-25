@@ -300,6 +300,19 @@ in
     assert baseline.startswith("/nix/store/"), baseline
     assert baseline != candidate, (baseline, candidate)
     assert candidate.startswith("/nix/store/"), candidate
+
+    # runNixOSTest boots directly from a store closure and does not install the
+    # conventional /nix/var/nix/profiles/system profile. The privileged boundary
+    # deliberately requires that installed-system invariant, so provision the VM's
+    # boot-default profile exactly to the immutable closure it actually booted.
+    machine.succeed(
+        "nix-env --profile /nix/var/nix/profiles/system --set " + shlex.quote(baseline)
+    )
+    boot_default = machine.succeed(
+        "readlink -f /nix/var/nix/profiles/system"
+    ).strip()
+    assert boot_default == baseline, (baseline, boot_default)
+
     machine.succeed("grep -qx BASELINE /etc/blob-activation-state")
     machine.succeed("test -x " + candidate + "/bin/switch-to-configuration")
     assert ledger_count() == 0
@@ -358,6 +371,7 @@ in
     assert reboot_boot_id != baseline_boot_id, (baseline_boot_id, reboot_boot_id)
     machine.wait_until_succeeds("grep -qx BASELINE /etc/blob-activation-state")
     assert machine.succeed("readlink -f /run/current-system").strip() == baseline
+    assert machine.succeed("readlink -f /nix/var/nix/profiles/system").strip() == baseline
     assert ledger_count() == 2
     assert_no_live_permit()
 
