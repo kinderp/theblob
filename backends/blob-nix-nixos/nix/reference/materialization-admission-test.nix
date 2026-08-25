@@ -95,6 +95,7 @@ in
             + " --attribute " + shlex.quote(attribute)
             + " --nix " + shlex.quote(NIX)
             + " --nix-store " + shlex.quote(NIX_STORE)
+            + " 2>&1"
         )
 
     def root_complete(operation=OP):
@@ -104,6 +105,7 @@ in
             + " --operation " + shlex.quote(operation)
             + " --nix " + shlex.quote(NIX)
             + " --nix-store " + shlex.quote(NIX_STORE)
+            + " 2>&1"
         )
 
     def field(output, key):
