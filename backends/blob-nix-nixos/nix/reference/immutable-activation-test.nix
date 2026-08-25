@@ -20,11 +20,15 @@
   };
 
   testScript = ''
-    machine.start()
+    # The NixOS test driver adds QEMU's -no-reboot unless this is explicit.
+    # We need the same QEMU process to survive the guest reboot so that the
+    # driver can reconnect and verify that `test` did not persist the candidate.
+    machine.start(allow_reboot = True)
     machine.wait_for_unit("multi-user.target")
 
     machine.succeed("grep -qx BASELINE /etc/blob-activation-state")
     baseline = machine.succeed("readlink -f /run/current-system").strip()
+    baseline_boot_id = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
     candidate = machine.succeed(
         "readlink -f /run/current-system/specialisation/blob-candidate"
     ).strip()
@@ -32,6 +36,7 @@
     assert baseline != candidate, "candidate must be a distinct immutable system closure"
     assert baseline.startswith("/nix/store/"), baseline
     assert candidate.startswith("/nix/store/"), candidate
+    assert baseline_boot_id != ""
     machine.succeed(f"test -x {candidate}/bin/switch-to-configuration")
 
     # Preview the exact reviewed closure. It may run explicitly dry-safe
@@ -51,6 +56,9 @@
     # boot closure remains authoritative; reboot must restore the baseline.
     machine.reboot()
     machine.wait_for_unit("multi-user.target")
+    reboot_boot_id = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
+    assert reboot_boot_id != ""
+    assert reboot_boot_id != baseline_boot_id, (baseline_boot_id, reboot_boot_id)
     machine.wait_until_succeeds("grep -qx BASELINE /etc/blob-activation-state")
     after_reboot = machine.succeed("readlink -f /run/current-system").strip()
     assert after_reboot == baseline, (baseline, after_reboot)
