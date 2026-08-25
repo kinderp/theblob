@@ -24,5 +24,9 @@
       checks.${system}.immutable-activation = pkgs.testers.runNixOSTest {
         imports = [ ./immutable-activation-test.nix ];
       };
+
+      checks.${system}.polkit-authority = pkgs.testers.runNixOSTest {
+        imports = [ ./polkit-authority-test.nix ];
+      };
     };
 }
