@@ -27,22 +27,21 @@ let
   };
 
   # Deliberately avoid nixpkgs/stdenv inside the guest materialization. The
-  # derivations use only BusyBox, retained explicitly in the guest system
-  # closure, so Alice's build proves local non-root realization without network
-  # substitutes.
+  # builder is emitted as a Nix path value (not a quoted path string), preserving
+  # its dependency context when the guest evaluates this generated flake.
   materializationFlake = pkgs.writeTextDir "flake.nix" ''
     {
       outputs = { self }: {
         packages.x86_64-linux.candidate = builtins.derivation {
           name = "blob-materialization-admission-candidate";
           system = "x86_64-linux";
-          builder = "${pkgs.busybox}/bin/sh";
+          builder = ${pkgs.busybox}/bin/sh;
           args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
         };
         packages.x86_64-linux.decoy = builtins.derivation {
           name = "blob-materialization-admission-decoy";
           system = "x86_64-linux";
-          builder = "${pkgs.busybox}/bin/sh";
+          builder = ${pkgs.busybox}/bin/sh;
           args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
         };
       };
@@ -60,8 +59,6 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
-    # Packages in the user profile are not sufficient for derivations evaluated
-    # inside the guest: retain the builder as an explicit system closure input.
     system.extraDependencies = [ pkgs.busybox ];
     users.users.alice = {
       isNormalUser = true;
@@ -127,6 +124,7 @@ in
 
     machine.start()
     machine.wait_for_unit("multi-user.target")
+    machine.succeed("test -x ${pkgs.busybox}/bin/sh")
 
     # A lexically store-local path that resolves through a symlink to /tmp is not
     # an immutable source and must be rejected before Nix evaluation.
