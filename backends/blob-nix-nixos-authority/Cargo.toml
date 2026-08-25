@@ -9,5 +9,6 @@ description = "Polkit authority planning and root-owned activation permit issuan
 [dependencies]
 blob-core = { path = "../../crates/blob-core" }
 blob-system-activation-gate = { path = "../../crates/blob-system-activation-gate" }
+blob-nix-nixos-activation = { path = "../blob-nix-nixos-activation" }
 blob-nix-nixos-privileged-helper = { path = "../blob-nix-nixos-privileged-helper" }
 blob-nix-nixos-root-boundary = { path = "../blob-nix-nixos-root-boundary" }
