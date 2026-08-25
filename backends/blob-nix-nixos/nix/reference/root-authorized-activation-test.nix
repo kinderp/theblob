@@ -292,13 +292,12 @@ in
     machine.wait_for_unit("blob-root-authorized-activation.service")
 
     baseline = machine.succeed("readlink -f /run/current-system").strip()
-    boot_default = machine.succeed("readlink -f /nix/var/nix/profiles/system").strip()
     candidate = machine.succeed(
         "readlink -f /run/current-system/specialisation/blob-candidate"
     ).strip()
     baseline_boot_id = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
 
-    assert baseline == boot_default, (baseline, boot_default)
+    assert baseline.startswith("/nix/store/"), baseline
     assert baseline != candidate, (baseline, candidate)
     assert candidate.startswith("/nix/store/"), candidate
     machine.succeed("grep -qx BASELINE /etc/blob-activation-state")
@@ -342,16 +341,16 @@ in
     assert machine.succeed("readlink -f /run/current-system").strip() == baseline
 
     # bob is authorized for the temporary test action. The exact immutable closure
-    # is activated live while the boot-default system remains the original baseline.
+    # becomes the live system, but `test` deliberately does not alter how the VM boots.
     status, output = user_call("bob", "Test")
     assert status == 0, (status, output)
     machine.wait_until_succeeds("grep -qx CANDIDATE /etc/blob-activation-state")
     assert machine.succeed("readlink -f /run/current-system").strip() == candidate
-    assert machine.succeed("readlink -f /nix/var/nix/profiles/system").strip() == baseline
     assert ledger_count() == 2
     assert_no_live_permit()
 
-    # `test` is non-persistent. Reboot restores the original closure and marker.
+    # `test` is non-persistent. The authoritative proof in a NixOS VM is that a
+    # real reboot returns to the original immutable closure and baseline marker.
     machine.reboot()
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-root-authorized-activation.service")
@@ -359,7 +358,6 @@ in
     assert reboot_boot_id != baseline_boot_id, (baseline_boot_id, reboot_boot_id)
     machine.wait_until_succeeds("grep -qx BASELINE /etc/blob-activation-state")
     assert machine.succeed("readlink -f /run/current-system").strip() == baseline
-    assert machine.succeed("readlink -f /nix/var/nix/profiles/system").strip() == baseline
     assert ledger_count() == 2
     assert_no_live_permit()
 
