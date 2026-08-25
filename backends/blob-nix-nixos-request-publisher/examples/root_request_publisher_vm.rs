@@ -10,7 +10,7 @@ use blob_core::{
 use blob_nix_nixos_request_publisher::RootPreparedActivationPublisher;
 use blob_node_probe::NodeSafetyConfirmations;
 
-const LOCAL_NODE: &str = "node:blob-root-request-publisher-vm";
+const LOCAL_NODE: &str = "node:blob-prepared-request-daemon-vm";
 
 struct Args {
     sender: String,
