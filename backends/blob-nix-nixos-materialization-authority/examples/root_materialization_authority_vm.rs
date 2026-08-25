@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use std::env;
-use std::path::PathBuf;
-use std::process::ExitCode;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use blob_core::{NodeId, SystemCandidateId, SystemOperationId, SystemSpecId};
@@ -81,8 +81,34 @@ fn print_intent(intent: &blob_nix_nixos_materialization_authority::Materializati
     println!("build-target={}", intent.build_target());
 }
 
+fn refresh_flake_archive(nix_program: &Path, flake_root: &Path) -> Result<(), String> {
+    let output = Command::new(nix_program)
+        .arg("flake")
+        .arg("archive")
+        .arg("--refresh")
+        .arg("--no-write-lock-file")
+        .arg(flake_root)
+        .stdin(Stdio::null())
+        .env_clear()
+        .env("HOME", "/root")
+        .env("USER", "root")
+        .env("LOGNAME", "root")
+        .env("LANG", "C")
+        .output()
+        .map_err(|error| format!("failed to spawn nix flake archive: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "nix flake archive refresh failed with {:?}: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).trim(),
+        ));
+    }
+    Ok(())
+}
+
 fn run() -> Result<(), String> {
     let args = parse_args()?;
+    let nix_program = args.nix.clone();
     let inspector = StdNixMaterializationInspector::new(args.nix, args.nix_store);
     let authority = RootMaterializationAdmissionAuthority::production_default();
 
@@ -110,13 +136,17 @@ fn run() -> Result<(), String> {
         }
         Mode::Resume => {
             // The caller supplies only the operation id. Root reloads the durable
-            // identity, then re-resolves from the *persisted* immutable source and
-            // attribute. This may restore Nix's .drv representation after reboot,
-            // but recovery succeeds only if both derivation and output remain
-            // exactly equal to the identity committed at begin.
+            // identity. The exact immutable source is retained separately; after
+            // reboot Nix may have lost its normalized flake source copy/eval
+            // artifacts, so archive refresh rehydrates those from the persisted
+            // source before identity is re-resolved. Recovery still succeeds only
+            // when both derivation and expected output equal the values committed
+            // at begin.
             let intent = authority
                 .load_pending(&args.operation)
                 .map_err(|error| format!("materialization resume rejected: {error:?}"))?;
+            refresh_flake_archive(&nix_program, &intent.immutable_flake_root)
+                .map_err(|error| format!("materialization resume archive failed: {error}"))?;
             let resolved = inspector
                 .resolve_exact_derivation(
                     &intent.immutable_flake_root,
