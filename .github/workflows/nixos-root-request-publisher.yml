@@ -1,0 +1,41 @@
+name: NixOS root request publisher
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  nixos-root-request-publisher-vm:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-root-request-publisher-vm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prove admitted materialization to root-published exact activation request
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          set -o pipefail
+          nix build -L .#checks.x86_64-linux.root-request-publisher 2>&1 | tee /tmp/blob-root-request-publisher.log
+
+      - name: Preserve compact failure tail
+        if: failure()
+        run: tail -n 280 /tmp/blob-root-request-publisher.log > /tmp/blob-root-request-publisher-tail.log
+
+      - name: Upload compact failure tail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-request-publisher-failure-tail
+          path: /tmp/blob-root-request-publisher-tail.log
+          if-no-files-found: error
