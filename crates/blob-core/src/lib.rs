@@ -6,6 +6,7 @@
 //! platform implementation. It exists to keep the semantic boundaries frozen
 //! independently from prototype technologies.
 
+pub mod authorization;
 pub mod events;
 pub mod execution;
 pub mod graphics;
@@ -15,6 +16,7 @@ pub mod physical_node;
 pub mod system;
 pub mod world;
 
+pub use authorization::*;
 pub use events::*;
 pub use execution::*;
 pub use graphics::*;

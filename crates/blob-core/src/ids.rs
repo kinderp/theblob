@@ -64,4 +64,5 @@ define_id!(
     SystemFeatureId,
     SystemCandidateId,
     SystemOperationId,
+    SystemAuthorizationId,
 );
