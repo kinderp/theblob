@@ -26,32 +26,38 @@ let
     '';
   };
 
-  # Deliberately avoid nixpkgs/stdenv inside the guest materialization. BusyBox
-  # is retained explicitly in the guest store and declared as a non-flake input,
-  # so pure flake evaluation records it as a real derivation dependency instead
-  # of relying on an impure absolute host path.
-  materializationFlake = pkgs.writeTextDir "flake.nix" ''
-    {
-      inputs.builder = {
-        url = "path:${pkgs.busybox}";
-        flake = false;
-      };
+  materializationBuilder = pkgs.writeScript "blob-materialization-builder" ''
+    #!${pkgs.busybox}/bin/sh
+    exec ${pkgs.busybox}/bin/sh "$@"
+  '';
 
-      outputs = { self, builder }: {
+  materializationFlakeFile = pkgs.writeText "blob-materialization-flake.nix" ''
+    {
+      outputs = { self }: {
         packages.x86_64-linux.candidate = builtins.derivation {
           name = "blob-materialization-admission-candidate";
           system = "x86_64-linux";
-          builder = "''${builder.outPath}/bin/sh";
+          builder = "''${self.outPath}/builder";
           args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
         };
         packages.x86_64-linux.decoy = builtins.derivation {
           name = "blob-materialization-admission-decoy";
           system = "x86_64-linux";
-          builder = "''${builder.outPath}/bin/sh";
+          builder = "''${self.outPath}/builder";
           args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
         };
       };
     }
+  '';
+
+  # The builder executable is part of the exact immutable source root root will
+  # authorize. This keeps flake evaluation pure: the derivation references only
+  # `self`, while the source closure carries the fixed BusyBox interpreter.
+  materializationFlake = pkgs.runCommand "blob-materialization-flake" { } ''
+    mkdir -p "$out"
+    cp ${materializationFlakeFile} "$out/flake.nix"
+    cp ${materializationBuilder} "$out/builder"
+    chmod 0555 "$out/builder"
   '';
 
   unsafeSource = pkgs.runCommand "blob-materialization-symlink-source" { } ''
@@ -65,8 +71,8 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
-    # Keep the declared local builder path available in the guest store even
-    # though network substituters are disabled.
+    # Keep the fixed interpreter reachable from the immutable source's builder
+    # script while network substituters remain disabled.
     system.extraDependencies = [ pkgs.busybox ];
     users.users.alice = {
       isNormalUser = true;
@@ -95,7 +101,7 @@ in
     HARNESS = "${authorityHarness}/bin/blob-materialization-authority-vm"
     SOURCE = "${materializationFlake}"
     UNSAFE_SOURCE = "${unsafeSource}/ref"
-    BUILDER = "${pkgs.busybox}/bin/sh"
+    BUILDER_INTERPRETER = "${pkgs.busybox}/bin/sh"
     NIX = "${pkgs.nix}/bin/nix"
     NIX_STORE = "${pkgs.nix}/bin/nix-store"
     OP = "op:blob-materialization-admission-vm"
@@ -133,7 +139,8 @@ in
 
     machine.start()
     machine.wait_for_unit("multi-user.target")
-    machine.succeed("test -x " + shlex.quote(BUILDER))
+    machine.succeed("test -x " + shlex.quote(BUILDER_INTERPRETER))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
 
     # A lexically store-local path that resolves through a symlink to /tmp is not
     # an immutable source and must be rejected before Nix evaluation.
