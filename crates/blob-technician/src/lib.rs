@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use blob_core::{
-    BindingPlan, ImprovementProposal, ImprovementProposalId, Situation, Task, TaskState,
-    TechnicianAutonomy,
+    BindingPlan, CausalKind, CausalRecord, ImprovementProposal, ImprovementProposalId, Situation,
+    Task, TaskState, TechnicianAutonomy,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,17 +17,32 @@ pub struct DiagnosticReport {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemChangeReport {
+    pub title: String,
+    pub summary: String,
+    pub why: String,
+    pub evidence: Vec<String>,
+    pub expected_effects: Vec<String>,
+    pub actual_effects: Vec<String>,
+    pub authorization: Option<String>,
+    pub rollback_reference: Option<String>,
+    pub safety_notes: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TechnicianError {
     UnsupportedSituation(String),
+    UnsupportedCausalKind(CausalKind),
     TaskIsNotFailed,
     BindingDoesNotBelongToTaskRequirement,
 }
 
-/// Read-only Phase 1 Technician.
+/// Read-only System Technician.
 ///
 /// This type intentionally has no executor, package-manager, SystemSpec or
 /// privileged mutation dependency. It can only transform already-structured
-/// evidence into a diagnostic report/proposal.
+/// evidence into human-facing reports/proposals. System-specific backends must
+/// first publish backend-neutral causal evidence before the Technician explains it.
 pub struct ReadOnlySystemTechnician;
 
 impl ReadOnlySystemTechnician {
@@ -116,5 +131,112 @@ impl ReadOnlySystemTechnician {
             suggested_next_steps: proposal.proposed_changes.clone(),
             proposal,
         })
+    }
+
+    /// Explain an already-recorded system change without acquiring any execution
+    /// dependency or authority. This is deliberately backend-neutral: NixOS,
+    /// macOS, Windows or future substrates can all publish `SystemChange` causal
+    /// records and reuse this explanation path.
+    pub fn explain_system_change(record: &CausalRecord) -> Result<SystemChangeReport, TechnicianError> {
+        if record.kind != CausalKind::SystemChange {
+            return Err(TechnicianError::UnsupportedCausalKind(record.kind.clone()));
+        }
+
+        let materialization_only = record
+            .evidence
+            .iter()
+            .any(|line| line == "effect-class:MaterializationOnly");
+
+        let mut safety_notes = vec![
+            "This report is read-only and cannot activate, roll back or otherwise mutate the system."
+                .into(),
+        ];
+        if materialization_only {
+            safety_notes.push(
+                "The recorded operation only materialized a candidate; it did not change the live system."
+                    .into(),
+            );
+        }
+        if record.rollback_reference.is_none() && !materialization_only {
+            safety_notes.push(
+                "No rollback reference is attached to this system-change record; activation should not be inferred safe from this report."
+                    .into(),
+            );
+        }
+
+        Ok(SystemChangeReport {
+            title: "System candidate operation".into(),
+            summary: record.summary.clone(),
+            why: record.why.clone(),
+            evidence: record.evidence.clone(),
+            expected_effects: record.expected_effects.clone(),
+            actual_effects: record.actual_effects.clone(),
+            authorization: record.authorization.clone(),
+            rollback_reference: record.rollback_reference.clone(),
+            safety_notes,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use blob_core::{CausalRecordId, CausalKind};
+
+    use super::*;
+
+    fn system_change_record() -> CausalRecord {
+        CausalRecord {
+            id: CausalRecordId::from("causal:system:test"),
+            kind: CausalKind::SystemChange,
+            occurred_at_unix_ms: 1,
+            parents: Vec::new(),
+            actor: "blob-system-executor".into(),
+            summary: "Materialize for candidate:test succeeded".into(),
+            why: "build the candidate before any activation".into(),
+            event: None,
+            situation: None,
+            task: None,
+            requirement_graph: None,
+            binding_plan: None,
+            binding_lease: None,
+            improvement_proposal: None,
+            evidence: vec![
+                "effect-class:MaterializationOnly".into(),
+                "nix-store-path:/nix/store/abc-system".into(),
+            ],
+            expected_effects: vec!["materialize immutable candidate".into()],
+            actual_effects: vec!["materialized:/nix/store/abc-system".into()],
+            authorization: Some("user/non-privileged materialization".into()),
+            rollback_reference: None,
+        }
+    }
+
+    #[test]
+    fn explains_materialization_without_backend_dependency() {
+        let report = ReadOnlySystemTechnician::explain_system_change(&system_change_record())
+            .expect("system change must be explainable");
+
+        assert!(report.summary.contains("succeeded"));
+        assert!(report
+            .evidence
+            .iter()
+            .any(|line| line.contains("/nix/store/abc-system")));
+        assert!(report.safety_notes.iter().any(|note| {
+            note.contains("did not change the live system")
+        }));
+        assert!(report.rollback_reference.is_none());
+    }
+
+    #[test]
+    fn rejects_non_system_change_records() {
+        let mut record = system_change_record();
+        record.kind = CausalKind::TaskTransition;
+
+        assert_eq!(
+            ReadOnlySystemTechnician::explain_system_change(&record),
+            Err(TechnicianError::UnsupportedCausalKind(
+                CausalKind::TaskTransition
+            ))
+        );
     }
 }
