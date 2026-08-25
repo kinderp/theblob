@@ -9,3 +9,6 @@ description = "Non-privileged system candidate executor for The Blob Linux Pilot
 [dependencies]
 blob-core = { path = "../blob-core" }
 blob-nix-nixos = { path = "../../backends/blob-nix-nixos" }
+
+[dev-dependencies]
+blob-history = { path = "../blob-history" }
