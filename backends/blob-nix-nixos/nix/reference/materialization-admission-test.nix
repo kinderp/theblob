@@ -26,18 +26,24 @@ let
     '';
   };
 
+  # Deliberately avoid nixpkgs/stdenv inside the guest materialization. The
+  # derivations use only BusyBox, which is already copied into the VM store, so
+  # Alice's build proves local non-root realization without network substitutes.
   materializationFlake = pkgs.writeTextDir "flake.nix" ''
     {
-      inputs.nixpkgs.url = "path:${pkgs.path}";
-      outputs = { self, nixpkgs }: {
-        packages.x86_64-linux.candidate =
-          let pkgs = import nixpkgs { system = "x86_64-linux"; };
-          in pkgs.runCommand "blob-materialization-admission-candidate" { }
-            "mkdir -p $out; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > $out/blob-marker";
-        packages.x86_64-linux.decoy =
-          let pkgs = import nixpkgs { system = "x86_64-linux"; };
-          in pkgs.runCommand "blob-materialization-admission-decoy" { }
-            "mkdir -p $out; printf '%s\\n' DECOY > $out/blob-marker";
+      outputs = { self }: {
+        packages.x86_64-linux.candidate = builtins.derivation {
+          name = "blob-materialization-admission-candidate";
+          system = "x86_64-linux";
+          builder = "${pkgs.busybox}/bin/sh";
+          args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
+        };
+        packages.x86_64-linux.decoy = builtins.derivation {
+          name = "blob-materialization-admission-decoy";
+          system = "x86_64-linux";
+          builder = "${pkgs.busybox}/bin/sh";
+          args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
+        };
       };
     }
   '';
@@ -52,6 +58,7 @@ in
 
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
+    nix.settings.substituters = lib.mkForce [ ];
     users.users.alice = {
       isNormalUser = true;
       uid = 1000;
@@ -59,6 +66,7 @@ in
     environment.systemPackages = [
       authorityHarness
       pkgs.nix
+      pkgs.busybox
     ];
     systemd.tmpfiles.rules = [
       "d /var/lib/theblob 0700 root root -"
