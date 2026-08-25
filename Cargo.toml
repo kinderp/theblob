@@ -15,6 +15,7 @@ members = [
     "backends/blob-nix-nixos-activation",
     "backends/blob-nix-nixos-privileged-helper",
     "backends/blob-nix-nixos-root-boundary",
+    "backends/blob-nix-nixos-authority",
 ]
 exclude = [
     "renderers/blob-surface-slint",
