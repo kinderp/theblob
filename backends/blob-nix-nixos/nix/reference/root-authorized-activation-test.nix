@@ -265,7 +265,11 @@ in
         Restart = "no";
         NoNewPrivileges = true;
         PrivateTmp = true;
-        ProtectHome = true;
+        # Do not use ProtectHome here. NixOS's activation script legitimately
+        # updates root/home ownership and user directories, so a mount namespace
+        # that makes /root or /home read-only makes an exact system activation
+        # impossible. Safety is enforced at the Blob authorization/permit/argv
+        # boundary rather than by hiding paths the fixed NixOS activator needs.
       };
     };
 
