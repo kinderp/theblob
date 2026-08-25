@@ -32,16 +32,12 @@ let
       outputs = { self, nixpkgs }: {
         packages.x86_64-linux.candidate =
           let pkgs = import nixpkgs { system = "x86_64-linux"; };
-          in pkgs.runCommand "blob-materialization-admission-candidate" { } ''
-            mkdir -p "$out"
-            printf '%s\n' 'BLOB_MATERIALIZATION_ADMISSION_OK' > "$out/blob-marker"
-          '';
+          in pkgs.runCommand "blob-materialization-admission-candidate" { }
+            "mkdir -p $out; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > $out/blob-marker";
         packages.x86_64-linux.decoy =
           let pkgs = import nixpkgs { system = "x86_64-linux"; };
-          in pkgs.runCommand "blob-materialization-admission-decoy" { } ''
-            mkdir -p "$out"
-            printf '%s\n' 'DECOY' > "$out/blob-marker"
-          '';
+          in pkgs.runCommand "blob-materialization-admission-decoy" { }
+            "mkdir -p $out; printf '%s\\n' DECOY > $out/blob-marker";
       };
     }
   '';
