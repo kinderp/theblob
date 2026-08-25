@@ -1,0 +1,11 @@
+[package]
+name = "blob-nix-nixos-activation"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Immutable NixOS system-closure activation planner for The Blob Linux Pilot"
+
+[dependencies]
+blob-core = { path = "../../crates/blob-core" }
+blob-system-executor = { path = "../../crates/blob-system-executor" }

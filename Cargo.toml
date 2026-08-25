@@ -11,6 +11,7 @@ members = [
     "crates/blob-mvp",
     "crates/blob-technician",
     "backends/blob-nix-nixos",
+    "backends/blob-nix-nixos-activation",
 ]
 exclude = [
     "renderers/blob-surface-slint",
