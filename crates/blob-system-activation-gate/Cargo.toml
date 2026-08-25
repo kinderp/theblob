@@ -9,3 +9,6 @@ description = "Readiness and scoped-authorization gate for privileged The Blob s
 [dependencies]
 blob-core = { path = "../blob-core" }
 blob-nix-nixos-activation = { path = "../../backends/blob-nix-nixos-activation" }
+
+[dev-dependencies]
+blob-system-executor = { path = "../blob-system-executor" }
