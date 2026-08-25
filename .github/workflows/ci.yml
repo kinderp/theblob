@@ -200,3 +200,22 @@ jobs:
       - name: Prove dry-activate, temporary test activation, and reboot recovery
         working-directory: backends/blob-nix-nixos/nix/reference
         run: nix build -L .#checks.x86_64-linux.immutable-activation
+
+  nixos-polkit-authority-vm:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-polkit-authority-vm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prove real polkit authorization for live unique system-bus identity
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: nix build -L .#checks.x86_64-linux.polkit-authority
