@@ -26,38 +26,32 @@ let
     '';
   };
 
-  materializationBuilder = pkgs.writeScript "blob-materialization-builder" ''
-    #!${pkgs.busybox}/bin/sh
-    exec ${pkgs.busybox}/bin/sh "$@"
-  '';
-
-  materializationFlakeFile = pkgs.writeText "blob-materialization-flake.nix" ''
+  # The guest build has one explicitly declared local flake input: a static
+  # BusyBox. Pure evaluation therefore records the builder input in the exact
+  # derivation, while the actual non-root build needs neither network nor a
+  # dynamic loader/runtime closure outside that input.
+  materializationFlake = pkgs.writeTextDir "flake.nix" ''
     {
-      outputs = { self }: {
+      inputs.builder = {
+        url = "path:${pkgs.pkgsStatic.busybox}";
+        flake = false;
+      };
+
+      outputs = { self, builder }: {
         packages.x86_64-linux.candidate = builtins.derivation {
           name = "blob-materialization-admission-candidate";
           system = "x86_64-linux";
-          builder = "''${self.outPath}/builder";
-          args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
+          builder = "''${builder.outPath}/bin/busybox";
+          args = [ "sh" "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
         };
         packages.x86_64-linux.decoy = builtins.derivation {
           name = "blob-materialization-admission-decoy";
           system = "x86_64-linux";
-          builder = "''${self.outPath}/builder";
-          args = [ "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
+          builder = "''${builder.outPath}/bin/busybox";
+          args = [ "sh" "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
         };
       };
     }
-  '';
-
-  # The builder executable is part of the exact immutable source root root will
-  # authorize. This keeps flake evaluation pure: the derivation references only
-  # `self`, while the source closure carries the fixed BusyBox interpreter.
-  materializationFlake = pkgs.runCommand "blob-materialization-flake" { } ''
-    mkdir -p "$out"
-    cp ${materializationFlakeFile} "$out/flake.nix"
-    cp ${materializationBuilder} "$out/builder"
-    chmod 0555 "$out/builder"
   '';
 
   unsafeSource = pkgs.runCommand "blob-materialization-symlink-source" { } ''
@@ -71,9 +65,9 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
-    # Keep the fixed interpreter reachable from the immutable source's builder
-    # script while network substituters remain disabled.
-    system.extraDependencies = [ pkgs.busybox ];
+    # Make the exact path used by the local `path:` flake input available in the
+    # guest before evaluation; the input is static and self-contained.
+    system.extraDependencies = [ pkgs.pkgsStatic.busybox ];
     users.users.alice = {
       isNormalUser = true;
       uid = 1000;
@@ -81,7 +75,6 @@ in
     environment.systemPackages = [
       authorityHarness
       pkgs.nix
-      pkgs.busybox
     ];
     systemd.tmpfiles.rules = [
       "d /var/lib/theblob 0700 root root -"
@@ -101,7 +94,7 @@ in
     HARNESS = "${authorityHarness}/bin/blob-materialization-authority-vm"
     SOURCE = "${materializationFlake}"
     UNSAFE_SOURCE = "${unsafeSource}/ref"
-    BUILDER_INTERPRETER = "${pkgs.busybox}/bin/sh"
+    STATIC_BUILDER = "${pkgs.pkgsStatic.busybox}/bin/busybox"
     NIX = "${pkgs.nix}/bin/nix"
     NIX_STORE = "${pkgs.nix}/bin/nix-store"
     OP = "op:blob-materialization-admission-vm"
@@ -139,8 +132,7 @@ in
 
     machine.start()
     machine.wait_for_unit("multi-user.target")
-    machine.succeed("test -x " + shlex.quote(BUILDER_INTERPRETER))
-    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
+    machine.succeed("test -x " + shlex.quote(STATIC_BUILDER))
 
     # A lexically store-local path that resolves through a symlink to /tmp is not
     # an immutable source and must be rejected before Nix evaluation.
