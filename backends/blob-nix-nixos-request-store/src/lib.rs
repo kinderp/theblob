@@ -63,9 +63,8 @@ impl FilePreparedActivationRequestStore {
         &self.root
     }
 
-    /// Read an unclaimed request without changing its state. This is intended
-    /// for semantic validation and OS authorization only. Privileged permit
-    /// issuance must happen only after `claim_exact` succeeds.
+    /// Read only. This phase is for semantic validation and OS authorization.
+    /// Privileged permit issuance is forbidden until `claim_exact` succeeds.
     pub fn load_ready(
         &self,
         authorization: &SystemAuthorizationId,
@@ -75,13 +74,12 @@ impl FilePreparedActivationRequestStore {
         self.read_request_path(&self.request_path(READY, authorization), authorization)
     }
 
-    /// Claim exactly the request that was already authorized by the OS.
+    /// Durably claim exactly the request that polkit already authorized.
     ///
-    /// The first durable operation is an O_CREAT|O_EXCL claim receipt in the
-    /// root-owned inflight directory. A crash after that point may strand the
-    /// request, but it can never make it ready/replayable again automatically.
-    /// The ready file is re-read after the claim receipt is durable, closing the
-    /// load->authorize->claim TOCTOU window before it is atomically renamed.
+    /// O_CREAT|O_EXCL creates the inflight receipt before any move. A crash can
+    /// therefore strand liveness, but cannot make a claimed request ready again.
+    /// The request is re-read after that durable receipt to close the
+    /// load->authorize->claim TOCTOU window before the atomic rename.
     pub fn claim_exact(
         &self,
         expected: &PreparedPrivilegedActivation,
@@ -90,8 +88,8 @@ impl FilePreparedActivationRequestStore {
         self.reject_non_ready_state(&expected.authorization)?;
 
         let ready_path = self.request_path(READY, &expected.authorization);
-        let observed_before = self.read_request_path(&ready_path, &expected.authorization)?;
-        if &observed_before != expected {
+        let before = self.read_request_path(&ready_path, &expected.authorization)?;
+        if before != *expected {
             return Err(PreparedActivationRequestStoreError::RequestMismatch);
         }
 
@@ -111,13 +109,25 @@ impl FilePreparedActivationRequestStore {
             Err(error) => return Err(PreparedActivationRequestStoreError::Io(error.to_string())),
         };
         writeln!(claim, "theblob-prepared-activation-claim-v1")
-            .and_then(|_| writeln!(claim, "authorization={}", hex_text(expected.authorization.as_str())))
-            .and_then(|_| writeln!(claim, "prepared-at-unix-ms={}", expected.prepared_at_unix_ms))
+            .and_then(|_| {
+                writeln!(
+                    claim,
+                    "authorization={}",
+                    hex_text(expected.authorization.as_str())
+                )
+            })
+            .and_then(|_| {
+                writeln!(
+                    claim,
+                    "prepared-at-unix-ms={}",
+                    expected.prepared_at_unix_ms
+                )
+            })
             .and_then(|_| claim.sync_all())
             .map_err(|error| PreparedActivationRequestStoreError::Io(error.to_string()))?;
         sync_dir(&self.state_dir(INFLIGHT))?;
 
-        let observed_after = self
+        let after = self
             .read_request_path(&ready_path, &expected.authorization)
             .map_err(|error| match error {
                 PreparedActivationRequestStoreError::MissingReady(_) => {
@@ -125,7 +135,7 @@ impl FilePreparedActivationRequestStore {
                 }
                 other => other,
             })?;
-        if observed_after != *expected {
+        if after != *expected {
             return Err(PreparedActivationRequestStoreError::RequestChangedAfterAuthorization);
         }
 
@@ -286,6 +296,8 @@ impl FilePreparedActivationRequestStore {
     }
 }
 
+/// Versioned, field-ordered, injection-safe representation. Text values are
+/// lowercase hex; unknown, duplicated, reordered or trailing fields are rejected.
 pub fn canonical_text(prepared: &PreparedPrivilegedActivation) -> String {
     let mut lines = vec![
         "theblob-prepared-activation-v1".to_owned(),
@@ -314,26 +326,16 @@ pub fn canonical_text(prepared: &PreparedPrivilegedActivation) -> String {
         format!("program={}", hex_text(&prepared.plan.program)),
         format!("args-count={}", prepared.plan.args.len()),
     ];
-    lines.extend(
-        prepared
-            .plan
-            .args
-            .iter()
-            .enumerate()
-            .map(|(index, value)| format!("arg-{index}={}", hex_text(value))),
-    );
+    for (index, value) in prepared.plan.args.iter().enumerate() {
+        lines.push(format!("arg-{index}={}", hex_text(value)));
+    }
     lines.push(format!(
         "expected-effects-count={}",
         prepared.plan.expected_effects.len()
     ));
-    lines.extend(
-        prepared
-            .plan
-            .expected_effects
-            .iter()
-            .enumerate()
-            .map(|(index, value)| format!("expected-effect-{index}={}", hex_text(value))),
-    );
+    for (index, value) in prepared.plan.expected_effects.iter().enumerate() {
+        lines.push(format!("expected-effect-{index}={}", hex_text(value)));
+    }
     lines.push(format!(
         "rollback-semantics={}",
         hex_text(&prepared.plan.rollback_semantics)
@@ -342,24 +344,19 @@ pub fn canonical_text(prepared: &PreparedPrivilegedActivation) -> String {
         "readiness-evidence-count={}",
         prepared.readiness_evidence.len()
     ));
-    lines.extend(
-        prepared
-            .readiness_evidence
-            .iter()
-            .enumerate()
-            .map(|(index, value)| format!("readiness-evidence-{index}={}", hex_text(value))),
-    );
+    for (index, value) in prepared.readiness_evidence.iter().enumerate() {
+        lines.push(format!("readiness-evidence-{index}={}", hex_text(value)));
+    }
     lines.push(format!(
         "authorization-evidence-count={}",
         prepared.authorization_evidence.len()
     ));
-    lines.extend(
-        prepared
-            .authorization_evidence
-            .iter()
-            .enumerate()
-            .map(|(index, value)| format!("authorization-evidence-{index}={}", hex_text(value))),
-    );
+    for (index, value) in prepared.authorization_evidence.iter().enumerate() {
+        lines.push(format!(
+            "authorization-evidence-{index}={}",
+            hex_text(value)
+        ));
+    }
     lines.push(String::new());
     lines.join("\n")
 }
@@ -390,28 +387,28 @@ pub fn parse_canonical_text(
     let system_closure = cursor.hex_field("system-closure")?;
     let program = cursor.hex_field("program")?;
 
-    let args_count = cursor.usize_field("args-count")?;
+    let args_count = cursor.count_field("args-count", 16)?;
     let mut args = Vec::with_capacity(args_count);
     for index in 0..args_count {
         args.push(cursor.hex_field(&format!("arg-{index}"))?);
     }
 
-    let expected_effects_count = cursor.usize_field("expected-effects-count")?;
-    let mut expected_effects = Vec::with_capacity(expected_effects_count);
-    for index in 0..expected_effects_count {
+    let expected_count = cursor.count_field("expected-effects-count", 256)?;
+    let mut expected_effects = Vec::with_capacity(expected_count);
+    for index in 0..expected_count {
         expected_effects.push(cursor.hex_field(&format!("expected-effect-{index}"))?);
     }
     let rollback_semantics = cursor.hex_field("rollback-semantics")?;
 
-    let readiness_evidence_count = cursor.usize_field("readiness-evidence-count")?;
-    let mut readiness_evidence = Vec::with_capacity(readiness_evidence_count);
-    for index in 0..readiness_evidence_count {
+    let readiness_count = cursor.count_field("readiness-evidence-count", 256)?;
+    let mut readiness_evidence = Vec::with_capacity(readiness_count);
+    for index in 0..readiness_count {
         readiness_evidence.push(cursor.hex_field(&format!("readiness-evidence-{index}"))?);
     }
 
-    let authorization_evidence_count = cursor.usize_field("authorization-evidence-count")?;
-    let mut authorization_evidence = Vec::with_capacity(authorization_evidence_count);
-    for index in 0..authorization_evidence_count {
+    let authorization_count = cursor.count_field("authorization-evidence-count", 256)?;
+    let mut authorization_evidence = Vec::with_capacity(authorization_count);
+    for index in 0..authorization_count {
         authorization_evidence.push(cursor.hex_field(&format!("authorization-evidence-{index}"))?);
     }
     cursor.finish()?;
@@ -454,6 +451,14 @@ impl<'a> LineCursor<'a> {
         }
     }
 
+    fn next_line(&mut self) -> Result<&'a str, PreparedActivationRequestStoreError> {
+        let line = self.lines.get(self.position).copied().ok_or_else(|| {
+            PreparedActivationRequestStoreError::Malformed("unexpected end of request".into())
+        })?;
+        self.position += 1;
+        Ok(line)
+    }
+
     fn expect_literal(
         &mut self,
         expected: &str,
@@ -487,23 +492,24 @@ impl<'a> LineCursor<'a> {
         })
     }
 
-    fn usize_field(&mut self, key: &str) -> Result<usize, PreparedActivationRequestStoreError> {
-        self.field(key)?.parse::<usize>().map_err(|_| {
-            PreparedActivationRequestStoreError::Malformed(format!("invalid usize field {key}"))
-        })
-    }
-
-    fn next_line(&mut self) -> Result<&'a str, PreparedActivationRequestStoreError> {
-        let line = self.lines.get(self.position).copied().ok_or_else(|| {
-            PreparedActivationRequestStoreError::Malformed("unexpected end of request".into())
+    fn count_field(
+        &mut self,
+        key: &str,
+        maximum: usize,
+    ) -> Result<usize, PreparedActivationRequestStoreError> {
+        let value = self.field(key)?.parse::<usize>().map_err(|_| {
+            PreparedActivationRequestStoreError::Malformed(format!("invalid count field {key}"))
         })?;
-        self.position += 1;
-        Ok(line)
+        if value > maximum {
+            return Err(PreparedActivationRequestStoreError::Malformed(format!(
+                "count field {key} exceeds limit"
+            )));
+        }
+        Ok(value)
     }
 
     fn finish(&mut self) -> Result<(), PreparedActivationRequestStoreError> {
-        let final_line = self.next_line()?;
-        if !final_line.is_empty() || self.position != self.lines.len() {
+        if !self.next_line()?.is_empty() || self.position != self.lines.len() {
             return Err(PreparedActivationRequestStoreError::Malformed(
                 "trailing or missing request data".into(),
             ));
@@ -545,25 +551,24 @@ fn parse_authority(
 
 fn action_token(action: &SystemCandidateAction) -> &'static str {
     match action {
+        SystemCandidateAction::Materialize => "materialize",
         SystemCandidateAction::PreviewActivation => "preview-activation",
         SystemCandidateAction::TestActivation => "test-activation",
-        SystemCandidateAction::Materialize => "materialize",
         SystemCandidateAction::BuildIsolatedVm => "build-isolated-vm",
     }
 }
 
 fn effect_token(effect: &SystemEffectClass) -> &'static str {
     match effect {
+        SystemEffectClass::MaterializationOnly => "materialization-only",
         SystemEffectClass::PreviewHooks => "preview-hooks",
         SystemEffectClass::TemporaryLiveActivation => "temporary-live-activation",
-        SystemEffectClass::MaterializationOnly => "materialization-only",
-        SystemEffectClass::IsolatedVmBuild => "isolated-vm-build",
     }
 }
 
 fn authority_token(authority: &SystemAuthorityClass) -> &'static str {
     match authority {
-        SystemAuthorityClass::Unprivileged => "unprivileged",
+        SystemAuthorityClass::User => "user",
         SystemAuthorityClass::HostAdministrator => "host-administrator",
     }
 }
@@ -614,9 +619,7 @@ fn decode_hex(value: &str) -> Result<String, PreparedActivationRequestStoreError
     }
     let mut bytes = Vec::with_capacity(value.len() / 2);
     for pair in value.as_bytes().chunks_exact(2) {
-        let high = hex_nibble(pair[0])?;
-        let low = hex_nibble(pair[1])?;
-        bytes.push((high << 4) | low);
+        bytes.push((hex_nibble(pair[0])? << 4) | hex_nibble(pair[1])?);
     }
     String::from_utf8(bytes).map_err(|_| {
         PreparedActivationRequestStoreError::Malformed("hex field is not UTF-8".into())
@@ -644,7 +647,10 @@ mod tests {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     const CANDIDATE: &str = "/nix/store/candidate-nixos-system-blob-pilot";
 
-    fn prepared(authorization: &str, action: SystemCandidateAction) -> PreparedPrivilegedActivation {
+    fn prepared(
+        authorization: &str,
+        action: SystemCandidateAction,
+    ) -> PreparedPrivilegedActivation {
         let (effect_class, argument) = match action {
             SystemCandidateAction::PreviewActivation => {
                 (SystemEffectClass::PreviewHooks, "dry-activate")
@@ -736,7 +742,7 @@ mod tests {
     }
 
     #[test]
-    fn parser_rejects_unknown_or_trailing_fields() {
+    fn parser_rejects_trailing_fields() {
         let request = prepared("auth:trailing", SystemCandidateAction::PreviewActivation);
         let mut text = canonical_text(&request);
         text.push_str("unexpected=value\n");
@@ -771,7 +777,7 @@ mod tests {
     }
 
     #[test]
-    fn successful_completion_moves_request_to_terminal_state() {
+    fn successful_completion_is_terminal() {
         let temp = TempStore::new();
         let request = prepared("auth:complete", SystemCandidateAction::TestActivation);
         temp.stage(&request);
@@ -785,7 +791,7 @@ mod tests {
     }
 
     #[test]
-    fn non_root_style_permissions_fail_closed() {
+    fn permissive_directory_mode_fails_closed() {
         let temp = TempStore::new();
         let request = prepared("auth:mode", SystemCandidateAction::PreviewActivation);
         temp.stage(&request);
