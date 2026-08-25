@@ -181,3 +181,22 @@ jobs:
           printf '%s\n' "$output"
           grep -q 'BLOB_VM_BOOT_OK' <<< "$output"
           test "$rc" -eq 0
+
+  nixos-immutable-activation-vm:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-immutable-activation-vm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prove dry-activate, temporary test activation, and reboot recovery
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: nix build -L .#checks.x86_64-linux.immutable-activation
