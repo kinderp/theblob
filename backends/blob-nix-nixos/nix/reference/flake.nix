@@ -37,6 +37,9 @@
         root-prepared-request-daemon = pkgs.testers.runNixOSTest {
           imports = [ ./root-prepared-request-daemon-test.nix ];
         };
+        root-request-publisher = pkgs.testers.runNixOSTest {
+          imports = [ ./root-request-publisher-test.nix ];
+        };
       };
     };
 }
