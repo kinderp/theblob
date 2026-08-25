@@ -3,7 +3,7 @@ let
   previewAction = "org.theblob.nixos.preview-activation";
   testAction = "org.theblob.nixos.test-activation";
 
-  blobPolkitActions = pkgs.writeTextDir "/share/polkit-1/actions/org.theblob.nixos.policy" ''
+  blobPolkitActions = pkgs.writeTextDir "share/polkit-1/actions/org.theblob.nixos.policy" ''
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE policyconfig PUBLIC
       "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
