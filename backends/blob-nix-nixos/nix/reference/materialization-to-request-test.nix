@@ -40,11 +40,11 @@ let
         packages.x86_64-linux.candidate = builtins.derivation {
           name = "blob-materialization-to-request-candidate";
           system = "x86_64-linux";
-          builder = "''${self.outPath}/builder";
+          builder = "''${self.outPath}/busybox";
           args = [
             "sh"
             "-c"
-            "\"''${self.outPath}/builder\" mkdir -p \"$out\"; printf '%s\\n' MATERIALIZED_FOR_PUBLISHER > \"$out/blob-marker\""
+            "\"''${self.outPath}/busybox\" mkdir -p \"$out\"; printf '%s\\n' MATERIALIZED_FOR_PUBLISHER > \"$out/blob-marker\""
           ];
         };
       };
@@ -53,12 +53,13 @@ let
 
   # Pending recovery requires the exact immutable source itself to remain
   # available across reboot. Keep the test source self-contained by embedding a
-  # static BusyBox builder in the same store object that carries flake.nix.
+  # static BusyBox executable in the same store object that carries flake.nix.
+  # Keep its canonical executable name: BusyBox dispatches applets from argv[0].
   materializationFlake = pkgs.runCommand "blob-materialization-to-request-flake" { } ''
     mkdir -p "$out"
     cp ${materializationFlakeFile} "$out/flake.nix"
-    cp ${pkgs.pkgsStatic.busybox}/bin/busybox "$out/builder"
-    chmod 0555 "$out/builder"
+    cp ${pkgs.pkgsStatic.busybox}/bin/busybox "$out/busybox"
+    chmod 0555 "$out/busybox"
   '';
 
   blobPolkitActions = pkgs.writeTextDir "share/polkit-1/actions/org.theblob.nixos.policy" ''
@@ -338,7 +339,7 @@ in
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-materialization-to-request.service")
     machine.succeed("test -f " + shlex.quote(SOURCE + "/flake.nix"))
-    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/busybox"))
 
     baseline = machine.succeed("readlink -f /run/current-system").strip()
     first_boot = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
@@ -361,7 +362,7 @@ in
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-materialization-to-request.service")
     machine.succeed("test -f " + shlex.quote(SOURCE + "/flake.nix"))
-    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/busybox"))
     second_boot = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
     assert second_boot != first_boot, (first_boot, second_boot)
     status, resume_output = authority("resume")
@@ -389,7 +390,7 @@ in
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-materialization-to-request.service")
     machine.succeed("test -f " + shlex.quote(SOURCE + "/flake.nix"))
-    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/busybox"))
     third_boot = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
     assert third_boot != second_boot, (second_boot, third_boot)
     status, resume_after_build = authority("resume")
