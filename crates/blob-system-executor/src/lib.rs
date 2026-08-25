@@ -5,8 +5,8 @@ use std::process::Command;
 use std::time::Instant;
 
 use blob_core::{
-    SystemAuthorityClass, SystemCandidateAction, SystemCandidateId, SystemEffectClass,
-    SystemOperationId, SystemSpecId,
+    CausalKind, CausalRecord, CausalRecordId, SystemAuthorityClass, SystemCandidateAction,
+    SystemCandidateId, SystemEffectClass, SystemOperationId, SystemSpecId,
 };
 use blob_nix_nixos::NixCommandPlan;
 
@@ -50,6 +50,69 @@ impl SystemOperationResult {
             evidence.push(format!("nix-store-path:{path}"));
         }
         evidence
+    }
+
+    /// Convert a completed system operation into backend-neutral causal evidence.
+    ///
+    /// The executor intentionally does not own the history store. Callers decide
+    /// where and when this record is appended. Raw stdout/stderr are deliberately
+    /// excluded because they may be large or contain incidental host data.
+    pub fn causal_record(
+        &self,
+        id: CausalRecordId,
+        occurred_at_unix_ms: u64,
+        parents: Vec<CausalRecordId>,
+        actor: impl Into<String>,
+        why: impl Into<String>,
+    ) -> CausalRecord {
+        let status = match self.status {
+            SystemOperationStatus::Succeeded => "succeeded",
+            SystemOperationStatus::Failed => "failed",
+        };
+        let action = format!("{:?}", self.action);
+
+        let expected_effects = match self.action {
+            SystemCandidateAction::Materialize => vec![
+                "materialize an immutable NixOS candidate without activating the live system"
+                    .into(),
+            ],
+            SystemCandidateAction::BuildIsolatedVm => vec![
+                "materialize an isolated NixOS VM candidate without activating the live system"
+                    .into(),
+            ],
+            SystemCandidateAction::PreviewActivation | SystemCandidateAction::TestActivation => {
+                vec!["operation is outside the non-privileged executor boundary".into()]
+            }
+        };
+
+        let mut actual_effects = vec![format!("system candidate operation {status}")];
+        actual_effects.extend(
+            self.store_paths
+                .iter()
+                .map(|path| format!("materialized:{path}")),
+        );
+
+        CausalRecord {
+            id,
+            kind: CausalKind::SystemChange,
+            occurred_at_unix_ms,
+            parents,
+            actor: actor.into(),
+            summary: format!("{action} for {} {status}", self.candidate),
+            why: why.into(),
+            event: None,
+            situation: None,
+            task: None,
+            requirement_graph: None,
+            binding_plan: None,
+            binding_lease: None,
+            improvement_proposal: None,
+            evidence: self.evidence_lines(),
+            expected_effects,
+            actual_effects,
+            authorization: Some("user/non-privileged materialization".into()),
+            rollback_reference: None,
+        }
     }
 }
 
@@ -172,7 +235,8 @@ pub fn default_reference_working_directory() -> PathBuf {
 mod tests {
     use std::path::PathBuf;
 
-    use blob_core::{SystemCandidateOperation, SystemCandidateAction};
+    use blob_core::{CausalRecordId, SystemCandidateAction, SystemCandidateOperation};
+    use blob_history::InMemoryCausalLog;
     use blob_nix_nixos::{NixOsBackend, NixOsCandidateTarget};
 
     use super::*;
@@ -192,6 +256,22 @@ mod tests {
             action,
         );
         NixOsBackend::plan_operation(&operation, &target()).expect("plan must be valid")
+    }
+
+    fn successful_result() -> SystemOperationResult {
+        SystemOperationResult {
+            operation_id: "op:test".into(),
+            candidate: "candidate:test".into(),
+            system_spec: "system:test".into(),
+            action: SystemCandidateAction::Materialize,
+            effect_class: SystemEffectClass::MaterializationOnly,
+            status: SystemOperationStatus::Succeeded,
+            exit_code: Some(0),
+            stdout: "/nix/store/abc-system\n".into(),
+            stderr: String::new(),
+            duration_us: 42,
+            store_paths: vec!["/nix/store/abc-system".into()],
+        }
     }
 
     #[test]
@@ -258,5 +338,36 @@ mod tests {
             parse_store_paths("warning\n/nix/store/abc-one\n/nix/store/def-two\n"),
             vec!["/nix/store/abc-one", "/nix/store/def-two"]
         );
+    }
+
+    #[test]
+    fn operation_result_becomes_appendable_causal_evidence() {
+        let result = successful_result();
+        let record = result.causal_record(
+            CausalRecordId::from("causal:system-op:test"),
+            1_787_594_437_000,
+            Vec::new(),
+            "blob-system-executor",
+            "materialize the validated Linux Pilot candidate before any activation",
+        );
+
+        assert_eq!(record.kind, CausalKind::SystemChange);
+        assert!(record
+            .evidence
+            .iter()
+            .any(|line| line == "nix-store-path:/nix/store/abc-system"));
+        assert!(record
+            .actual_effects
+            .iter()
+            .any(|effect| effect == "materialized:/nix/store/abc-system"));
+        assert_eq!(
+            record.authorization.as_deref(),
+            Some("user/non-privileged materialization")
+        );
+        assert!(record.rollback_reference.is_none());
+
+        let mut log = InMemoryCausalLog::default();
+        log.append(record.clone()).expect("causal record must append");
+        assert_eq!(log.get(&record.id), Some(&record));
     }
 }
