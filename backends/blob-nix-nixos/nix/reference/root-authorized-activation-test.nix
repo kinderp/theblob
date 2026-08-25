@@ -248,10 +248,14 @@ in
       description = "The Blob disposable authorized activation root service";
       wantedBy = [ "multi-user.target" ];
       after = [ "dbus.service" "polkit.service" "systemd-tmpfiles-setup.service" ];
-      requires = [ "dbus.service" "polkit.service" ];
+      requires = [ "dbus.service" ];
+      wants = [ "polkit.service" ];
       # The privileged authority must not be restarted by the very temporary
       # activation transaction it is supervising. A controlled daemon upgrade
       # belongs to a separate handoff/reboot boundary, not this in-flight call.
+      # Polkit is deliberately a weak dependency: if it recycles during a NixOS
+      # test activation, this daemon stays alive and new checks fail closed until
+      # polkit is available again instead of killing the in-flight transaction.
       restartIfChanged = false;
       serviceConfig = {
         Type = "simple";
