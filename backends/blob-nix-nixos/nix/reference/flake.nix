@@ -7,8 +7,10 @@
 
   outputs = { self, nixpkgs }:
     let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
       mkBlobPilot = extraModules: nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
+        inherit system;
         modules = [
           ./base.nix
           ./generated.nix
@@ -18,5 +20,9 @@
     {
       nixosConfigurations.blob-pilot = mkBlobPilot [ ];
       nixosConfigurations.blob-pilot-smoke = mkBlobPilot [ ./smoke.nix ];
+
+      checks.${system}.immutable-activation = pkgs.testers.runNixOSTest {
+        imports = [ ./immutable-activation-test.nix ];
+      };
     };
 }
