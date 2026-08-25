@@ -34,28 +34,31 @@ let
     '';
   };
 
-  # Minimal hermetic materialization target. Root resolves its exact .drv/output
-  # first; the ordinary user later realizes only that committed derivation.
-  materializationFlake = pkgs.writeTextDir "flake.nix" ''
+  materializationFlakeFile = pkgs.writeText "blob-materialization-to-request-flake.nix" ''
     {
-      inputs.builder = {
-        url = "path:${pkgs.pkgsStatic.busybox}";
-        flake = false;
-      };
-
-      outputs = { self, builder }: {
+      outputs = { self }: {
         packages.x86_64-linux.candidate = builtins.derivation {
           name = "blob-materialization-to-request-candidate";
           system = "x86_64-linux";
-          builder = "''${builder.outPath}/bin/busybox";
+          builder = "''${self.outPath}/builder";
           args = [
             "sh"
             "-c"
-            "\"''${builder.outPath}/bin/busybox\" mkdir -p \"$out\"; printf '%s\\n' MATERIALIZED_FOR_PUBLISHER > \"$out/blob-marker\""
+            "\"''${self.outPath}/builder\" mkdir -p \"$out\"; printf '%s\\n' MATERIALIZED_FOR_PUBLISHER > \"$out/blob-marker\""
           ];
         };
       };
     }
+  '';
+
+  # Pending recovery requires the exact immutable source itself to remain
+  # available across reboot. Keep the test source self-contained by embedding a
+  # static BusyBox builder in the same store object that carries flake.nix.
+  materializationFlake = pkgs.runCommand "blob-materialization-to-request-flake" { } ''
+    mkdir -p "$out"
+    cp ${materializationFlakeFile} "$out/flake.nix"
+    cp ${pkgs.pkgsStatic.busybox}/bin/busybox "$out/builder"
+    chmod 0555 "$out/builder"
   '';
 
   blobPolkitActions = pkgs.writeTextDir "share/polkit-1/actions/org.theblob.nixos.policy" ''
@@ -211,7 +214,10 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
-    system.extraDependencies = [ pkgs.pkgsStatic.busybox ];
+    # The source identity persisted in a pending intent must remain available for
+    # recovery. In the VM, an explicit system closure dependency models that
+    # retention requirement without retaining arbitrary derived outputs.
+    system.extraDependencies = [ materializationFlake ];
 
     security.polkit.enable = true;
     security.polkit.extraConfig = ''
@@ -325,6 +331,8 @@ in
     machine.start(allow_reboot = True)
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-materialization-to-request.service")
+    machine.succeed("test -f " + shlex.quote(SOURCE + "/flake.nix"))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
 
     baseline = machine.succeed("readlink -f /run/current-system").strip()
     first_boot = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
@@ -341,11 +349,13 @@ in
     assert ready_count() == 0
     machine.succeed("test -z \"$(find " + ADMISSIONS + " -maxdepth 1 -type f -print -quit)\"")
 
-    # Recovery before realization: reboot, reload only the root-owned operation id,
-    # and recover exactly the same committed target without re-supplying identity.
+    # Recovery before realization: reboot, retain the exact immutable source,
+    # then re-resolve from root-owned source+attribute and require exact identity.
     machine.reboot()
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-materialization-to-request.service")
+    machine.succeed("test -f " + shlex.quote(SOURCE + "/flake.nix"))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
     second_boot = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
     assert second_boot != first_boot, (first_boot, second_boot)
     status, resume_output = authority("resume")
@@ -367,15 +377,19 @@ in
     )
     machine.succeed("grep -qx MATERIALIZED_FOR_PUBLISHER " + shlex.quote(expected + "/blob-marker"))
 
-    # Recovery after realization but before admission: another reboot still leaves
-    # the exact pending intent, and completion verifies only that precommitted output.
+    # Recovery after realization but before admission: the immutable source is
+    # retained again; recovery must revalidate the same committed identity.
     machine.reboot()
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-materialization-to-request.service")
+    machine.succeed("test -f " + shlex.quote(SOURCE + "/flake.nix"))
+    machine.succeed("test -x " + shlex.quote(SOURCE + "/builder"))
     third_boot = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
     assert third_boot != second_boot, (second_boot, third_boot)
     status, resume_after_build = authority("resume")
     assert status == 0, (status, resume_after_build)
+    assert field(resume_after_build, "derivation") == derivation, resume_after_build
+    assert field(resume_after_build, "expected-output") == expected, resume_after_build
     assert field(resume_after_build, "build-target") == target, resume_after_build
 
     status, complete_output = authority("complete")
