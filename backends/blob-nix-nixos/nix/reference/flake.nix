@@ -31,6 +31,9 @@
         root-dbus-ipc = pkgs.testers.runNixOSTest {
           imports = [ ./root-dbus-ipc-test.nix ];
         };
+        root-authorized-activation = pkgs.testers.runNixOSTest {
+          imports = [ ./root-authorized-activation-test.nix ];
+        };
       };
     };
 }
