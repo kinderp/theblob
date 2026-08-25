@@ -238,3 +238,36 @@ jobs:
       - name: Prove root D-Bus service derives live sender and fails closed
         working-directory: backends/blob-nix-nixos/nix/reference
         run: nix build -L .#checks.x86_64-linux.root-dbus-ipc
+
+  nixos-root-authorized-activation-vm:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-authorized-activation-vm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prove D-Bus sender to polkit permit to exact temporary activation
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          set -o pipefail
+          nix build -L .#checks.x86_64-linux.root-authorized-activation 2>&1 | tee /tmp/blob-root-authorized-activation.log
+
+      - name: Preserve compact failure tail
+        if: failure()
+        run: tail -n 220 /tmp/blob-root-authorized-activation.log > /tmp/blob-root-authorized-activation-tail.log
+
+      - name: Upload compact failure tail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-authorized-activation-failure-tail
+          path: /tmp/blob-root-authorized-activation-tail.log
+          if-no-files-found: error
