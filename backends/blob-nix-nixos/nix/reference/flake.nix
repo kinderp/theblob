@@ -34,6 +34,9 @@
         root-authorized-activation = pkgs.testers.runNixOSTest {
           imports = [ ./root-authorized-activation-test.nix ];
         };
+        root-prepared-request-daemon = pkgs.testers.runNixOSTest {
+          imports = [ ./root-prepared-request-daemon-test.nix ];
+        };
       };
     };
 }
