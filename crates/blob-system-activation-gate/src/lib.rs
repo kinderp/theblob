@@ -18,6 +18,7 @@ pub struct PreparedPrivilegedActivation {
     pub node: NodeId,
     pub readiness_observed_at_unix_ms: u64,
     pub authorization: SystemAuthorizationId,
+    pub authorization_expires_at_unix_ms: u64,
     pub prepared_at_unix_ms: u64,
     pub plan: ImmutableNixOsActivationPlan,
     pub readiness_evidence: Vec<String>,
@@ -98,6 +99,7 @@ impl PrivilegedActivationGate {
             node: readiness.node.clone(),
             readiness_observed_at_unix_ms: readiness.observed_at_unix_ms,
             authorization: authorization.id.clone(),
+            authorization_expires_at_unix_ms: authorization.expires_at_unix_ms,
             prepared_at_unix_ms: now_unix_ms,
             plan,
             readiness_evidence: readiness.evidence_lines(),
@@ -208,6 +210,10 @@ mod tests {
             .plan
             .program
             .ends_with("/bin/switch-to-configuration"));
+        assert_eq!(
+            prepared.authorization_expires_at_unix_ms,
+            receipt.expires_at_unix_ms
+        );
         assert!(ledger.was_consumed(&receipt.id));
     }
 
