@@ -126,7 +126,7 @@ impl NixMaterializationInspector for StdNixMaterializationInspector {
         immutable_flake_root: &Path,
         installable_attribute: &str,
     ) -> Result<ResolvedMaterializationDerivation, String> {
-        validate_immutable_store_subpath(immutable_flake_root)?;
+        validate_canonical_immutable_store_subpath(immutable_flake_root)?;
         validate_installable_attribute(installable_attribute)?;
         let installable = format!(
             "{}#{}",
@@ -272,7 +272,7 @@ impl RootMaterializationAdmissionAuthority {
         inspector: &I,
     ) -> Result<MaterializationIntent, MaterializationAuthorityError> {
         self.validate_layout()?;
-        validate_immutable_store_subpath(&spec.immutable_flake_root)
+        validate_canonical_immutable_store_subpath(&spec.immutable_flake_root)
             .map_err(|_| MaterializationAuthorityError::InvalidImmutableFlakeRoot)?;
         validate_installable_attribute(&spec.installable_attribute)
             .map_err(|_| MaterializationAuthorityError::InvalidInstallableAttribute)?;
@@ -617,6 +617,20 @@ fn validate_immutable_store_subpath(path: &Path) -> Result<(), String> {
         return Err("flake root has unsafe path components".into());
     }
     Ok(())
+}
+
+fn validate_canonical_immutable_store_subpath(path: &Path) -> Result<(), String> {
+    validate_immutable_store_subpath(path)?;
+    let canonical = fs::canonicalize(path)
+        .map_err(|error| format!("failed to canonicalize immutable flake root: {error}"))?;
+    if canonical != path {
+        return Err(format!(
+            "immutable flake root is not canonical: {} -> {}",
+            path.display(),
+            canonical.display()
+        ));
+    }
+    validate_immutable_store_subpath(&canonical)
 }
 
 fn validate_installable_attribute(value: &str) -> Result<(), String> {
