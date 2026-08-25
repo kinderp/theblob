@@ -27,8 +27,9 @@ let
   };
 
   # Deliberately avoid nixpkgs/stdenv inside the guest materialization. The
-  # derivations use only BusyBox, which is already copied into the VM store, so
-  # Alice's build proves local non-root realization without network substitutes.
+  # derivations use only BusyBox, retained explicitly in the guest system
+  # closure, so Alice's build proves local non-root realization without network
+  # substitutes.
   materializationFlake = pkgs.writeTextDir "flake.nix" ''
     {
       outputs = { self }: {
@@ -59,6 +60,9 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
+    # Packages in the user profile are not sufficient for derivations evaluated
+    # inside the guest: retain the builder as an explicit system closure input.
+    system.extraDependencies = [ pkgs.busybox ];
     users.users.alice = {
       isNormalUser = true;
       uid = 1000;
