@@ -42,13 +42,21 @@ let
           name = "blob-materialization-admission-candidate";
           system = "x86_64-linux";
           builder = "''${builder.outPath}/bin/busybox";
-          args = [ "sh" "-c" "mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\"" ];
+          args = [
+            "sh"
+            "-c"
+            "\"''${builder.outPath}/bin/busybox\" mkdir -p \"$out\"; printf '%s\\n' BLOB_MATERIALIZATION_ADMISSION_OK > \"$out/blob-marker\""
+          ];
         };
         packages.x86_64-linux.decoy = builtins.derivation {
           name = "blob-materialization-admission-decoy";
           system = "x86_64-linux";
           builder = "''${builder.outPath}/bin/busybox";
-          args = [ "sh" "-c" "mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\"" ];
+          args = [
+            "sh"
+            "-c"
+            "\"''${builder.outPath}/bin/busybox\" mkdir -p \"$out\"; printf '%s\\n' DECOY > \"$out/blob-marker\""
+          ];
         };
       };
     }
