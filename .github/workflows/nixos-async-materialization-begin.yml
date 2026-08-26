@@ -1,0 +1,41 @@
+name: NixOS async materialization begin
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  async-materialization-begin-vm:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-async-materialization-begin-vm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prove durable async begin survives daemon crash without duplicate operation
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          set -o pipefail
+          nix build -L .#checks.x86_64-linux.async-materialization-begin 2>&1 | tee /tmp/async-materialization-begin.log
+
+      - name: Preserve compact failure tail
+        if: failure()
+        run: tail -n 260 /tmp/async-materialization-begin.log > /tmp/async-materialization-begin-tail.log
+
+      - name: Upload compact failure tail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: async-materialization-begin-failure-tail
+          path: /tmp/async-materialization-begin-tail.log
+          if-no-files-found: ignore
