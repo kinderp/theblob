@@ -19,6 +19,7 @@ members = [
     "backends/blob-nix-nixos-request-store",
     "backends/blob-nix-nixos-request-publisher",
     "backends/blob-nix-nixos-materialization-authority",
+    "backends/blob-nix-nixos-materialization-begin",
 ]
 exclude = [
     "renderers/blob-surface-slint",

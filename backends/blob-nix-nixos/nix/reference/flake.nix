@@ -49,6 +49,9 @@
         materialization-to-request = pkgs.testers.runNixOSTest {
           imports = [ ./materialization-to-request-test.nix ];
         };
+        materialization-begin-boundary = pkgs.testers.runNixOSTest {
+          imports = [ ./materialization-begin-boundary-test.nix ];
+        };
       };
     };
 }
