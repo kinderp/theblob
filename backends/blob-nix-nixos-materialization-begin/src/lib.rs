@@ -1,16 +1,17 @@
 #![forbid(unsafe_code)]
 
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
-use std::os::unix::fs::{symlink, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::fs::{self, File};
+use std::io::Read;
+use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use blob_core::{NodeId, SystemCandidateId, SystemOperationId, SystemSpecId};
 use blob_nix_nixos_materialization_authority::{
-    MaterializationAdmission, MaterializationAuthorityError, MaterializationIntent,
-    MaterializationIntentSpec, NixMaterializationInspector, RootMaterializationAdmissionAuthority,
+    MaterializationAuthorityError, MaterializationIntent, MaterializationIntentSpec,
+    NixMaterializationInspector, RootMaterializationAdmissionAuthority,
 };
+use blob_nix_nixos_request_publisher::MaterializationAdmission;
 
 pub const DEFAULT_TRUSTED_CANDIDATE_ROOT: &str =
     "/var/lib/theblob/materialization-candidates";
