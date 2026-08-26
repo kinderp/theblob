@@ -52,6 +52,9 @@
         materialization-begin-boundary = pkgs.testers.runNixOSTest {
           imports = [ ./materialization-begin-boundary-test.nix ];
         };
+        systemspec-candidate-producer = pkgs.testers.runNixOSTest {
+          imports = [ ./systemspec-candidate-producer-test.nix ];
+        };
       };
     };
 }
