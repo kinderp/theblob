@@ -44,7 +44,7 @@ let
   blobDbusPolicy = pkgs.writeTextDir "share/dbus-1/system.d/org.theblob.NixOsCandidate.conf" ''
     <!DOCTYPE busconfig PUBLIC
       "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
-      "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+      "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
     <busconfig>
       <policy user="root">
         <allow own="${busName}"/>
@@ -68,9 +68,7 @@ let
       OBJECT_PATH = ${builtins.toJSON objectPath}
       INTERFACE = ${builtins.toJSON interfaceName}
       PRODUCER = ${builtins.toJSON "${rootHarnesses}/bin/blob-systemspec-candidate-producer-vm"}
-      BEGIN = ${builtins.toJSON "${rootHarnesses}/bin/blob-materialization-begin-vm"}
       NIX = ${builtins.toJSON "${pkgs.nix}/bin/nix"}
-      NIX_STORE = ${builtins.toJSON "${pkgs.nix}/bin/nix-store"}
       NIXPKGS = ${builtins.toJSON "${pkgs.path}"}
       BASE_MODULE = ${builtins.toJSON "${trustedBaseModule}"}
       STAGING = "/var/lib/theblob/candidate-source-staging"
@@ -81,11 +79,6 @@ let
           <method name='PrepareCandidate'>
             <arg type='s' name='canonical_system_spec' direction='in'/>
             <arg type='s' name='manifest_id' direction='out'/>
-            <arg type='s' name='evidence' direction='out'/>
-          </method>
-          <method name='Begin'>
-            <arg type='s' name='manifest_id' direction='in'/>
-            <arg type='s' name='operation' direction='out'/>
             <arg type='s' name='evidence' direction='out'/>
           </method>
         </interface>
@@ -113,26 +106,6 @@ let
               raise RuntimeError(detail[-1800:] or "candidate producer rejected")
           return result.stdout.strip()
 
-      def run_begin(manifest_id):
-          result = subprocess.run(
-              [
-                  BEGIN,
-                  "--mode", "begin",
-                  "--manifest-id", manifest_id,
-                  "--nix", NIX,
-                  "--nix-store", NIX_STORE,
-              ],
-              stdin=subprocess.DEVNULL,
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True,
-              check=False,
-          )
-          if result.returncode != 0:
-              detail = result.stderr.strip().replace("\n", " | ")
-              raise RuntimeError(detail[-1800:] or "materialization begin rejected")
-          return result.stdout.strip()
-
       def field(evidence, key, prefix=None):
           for line in evidence.splitlines():
               if line.startswith(key + "="):
@@ -149,26 +122,17 @@ let
               )
               return
           try:
-              if method_name == "PrepareCandidate":
-                  canonical_spec = parameters.unpack()[0]
-                  evidence = run_producer(sender, canonical_spec)
-                  manifest_id = field(evidence, "manifest-id", "manifest:systemspec-")
-                  evidence = "sender=" + sender + "\n" + evidence
-                  invocation.return_value(GLib.Variant("(ss)", (manifest_id, evidence)))
+              if method_name != "PrepareCandidate":
+                  invocation.return_dbus_error(
+                      "org.theblob.Error.UnsupportedMethod",
+                      "Unsupported candidate method",
+                  )
                   return
-
-              if method_name == "Begin":
-                  manifest_id = parameters.unpack()[0]
-                  evidence = run_begin(manifest_id)
-                  operation = field(evidence, "operation", "op:materialize-")
-                  evidence = "sender=" + sender + "\n" + evidence
-                  invocation.return_value(GLib.Variant("(ss)", (operation, evidence)))
-                  return
-
-              invocation.return_dbus_error(
-                  "org.theblob.Error.UnsupportedMethod",
-                  "Unsupported candidate method",
-              )
+              canonical_spec = parameters.unpack()[0]
+              evidence = run_producer(sender, canonical_spec)
+              manifest_id = field(evidence, "manifest-id", "manifest:systemspec-")
+              evidence = "sender=" + sender + "\n" + evidence
+              invocation.return_value(GLib.Variant("(ss)", (manifest_id, evidence)))
           except Exception as error:
               invocation.return_dbus_error(
                   "org.theblob.Error.CandidateRejected",
@@ -198,7 +162,7 @@ let
           None,
       )
       if registration == 0:
-        raise RuntimeError("failed to register D-Bus object")
+          raise RuntimeError("failed to register D-Bus object")
       GLib.MainLoop().run()
     '';
   };
@@ -258,6 +222,9 @@ in
     PATH = "${objectPath}"
     IFACE = "${interfaceName}"
     RENDER_SPEC = "${rootHarnesses}/bin/blob-render-reference-system-spec"
+    BEGIN = "${rootHarnesses}/bin/blob-materialization-begin-vm"
+    NIX = "${pkgs.nix}/bin/nix"
+    NIX_STORE = "${pkgs.nix}/bin/nix-store"
     EXPECTED_GENERATED = "${expectedGenerated}"
     NIXPKGS = "${pkgs.path}"
     MANIFESTS = "/var/lib/theblob/materialization-candidates"
@@ -271,10 +238,21 @@ in
         if args:
             tail += " " + " ".join(shlex.quote(value) for value in args)
         inner = (
-            "busctl --system --timeout=120s call " + DEST + " " + PATH + " " + IFACE
+            "busctl --system call " + DEST + " " + PATH + " " + IFACE
             + " " + method + tail + " 2>&1"
         )
         return machine.execute("su -s /bin/sh " + user + " -c " + shlex.quote(inner))
+
+    def root_begin(manifest_id):
+        command = (
+            BEGIN
+            + " --mode begin"
+            + " --manifest-id " + shlex.quote(manifest_id)
+            + " --nix " + shlex.quote(NIX)
+            + " --nix-store " + shlex.quote(NIX_STORE)
+            + " 2>&1"
+        )
+        return machine.execute(command)
 
     def quoted(output):
         return re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"', output)
@@ -301,6 +279,8 @@ in
     assert spec.startswith("theblob-system-spec-v1\n"), spec
     assert spec.endswith("\n"), spec
 
+    # PrepareCandidate has one semantic input. Native/source additions do not
+    # match the D-Bus signature and cannot reach the root producer.
     status, output = call("alice", "PrepareCandidate", "ss", spec, "/nix/store/evil")
     assert status != 0, (status, output)
     machine.succeed("test -z \"$(find " + MANIFESTS + " -maxdepth 1 -type f -print -quit)\"")
@@ -347,9 +327,11 @@ in
     machine.fail("grep -Fq 'builtins.getEnv' " + shlex.quote(source + "/flake.nix"))
     machine.fail("grep -Fq -- '--impure' " + shlex.quote(source + "/flake.nix"))
 
-    status, begin_output = call("alice", "Begin", "s", manifest_id)
-    assert status == 0, (status, begin_output)
-    begin_evidence = evidence_from(begin_output, "derivation=")
+    # ADR-0037 separately proves the public D-Bus Begin(manifest_id) boundary.
+    # This composition calls the same root coordinator directly so the long Nix
+    # derivation resolution is not disguised as a synchronous RPC requirement.
+    status, begin_evidence = root_begin(manifest_id)
+    assert status == 0, (status, begin_evidence)
     operation = field(begin_evidence, "operation")
     assert operation.startswith("op:materialize-"), operation
     assert field(begin_evidence, "candidate") == candidate, begin_evidence
