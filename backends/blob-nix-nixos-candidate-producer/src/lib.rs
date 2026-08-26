@@ -27,9 +27,9 @@ pub const DEFAULT_CANDIDATE_STAGING_ROOT: &str =
 pub const DEFAULT_CANDIDATE_SOURCE_GCROOT_ROOT: &str =
     "/nix/var/nix/gcroots/theblob-candidate-sources";
 pub const MAX_CANONICAL_SYSTEM_SPEC_BYTES: u64 = 64 * 1024;
-pub const MAX_CANDIDATE_RECEIPT_BYTES: u64 = 128 * 1024;
 
 const PRODUCER_ACTOR: &str = "blob-nix-nixos-candidate-producer";
+const CANDIDATE_SOURCE_NAME: &str = "theblob-candidate-source";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanonicalSystemSpecError {
@@ -142,11 +142,16 @@ impl CandidateSourceBuilder for StdNixCandidateSourceBuilder {
         let base_module = fs::read_to_string(&self.base_module_source)
             .map_err(|error| format!("failed to read trusted base module: {error}"))?;
         let nonce = random_hex_128()?;
-        let staging = self.staging_root.join(format!("candidate-{nonce}"));
+        let work = self.staging_root.join(format!("candidate-{nonce}"));
+        let staging = work.join(CANDIDATE_SOURCE_NAME);
+        fs::create_dir(&work)
+            .map_err(|error| format!("failed to create source work directory: {error}"))?;
+        fs::set_permissions(&work, fs::Permissions::from_mode(0o700))
+            .map_err(|error| format!("failed to protect source work directory: {error}"))?;
         fs::create_dir(&staging)
             .map_err(|error| format!("failed to create source staging directory: {error}"))?;
-        fs::set_permissions(&staging, fs::Permissions::from_mode(0o700))
-            .map_err(|error| format!("failed to protect source staging directory: {error}"))?;
+        fs::set_permissions(&staging, fs::Permissions::from_mode(0o755))
+            .map_err(|error| format!("failed to set source staging permissions: {error}"))?;
 
         let result = (|| {
             write_file(&staging.join("base.nix"), &base_module, 0o644)?;
@@ -160,14 +165,12 @@ impl CandidateSourceBuilder for StdNixCandidateSourceBuilder {
 
             let output = self.run(&[
                 "store".into(),
-                "add-path".into(),
-                "--name".into(),
-                "theblob-candidate-source".into(),
+                "add".into(),
                 staging.display().to_string(),
             ])?;
             if !output.status.success() {
                 return Err(format!(
-                    "nix store add-path failed with {:?}: {}",
+                    "nix store add failed with {:?}: {}",
                     output.status.code(),
                     String::from_utf8_lossy(&output.stderr).trim()
                 ));
@@ -177,7 +180,7 @@ impl CandidateSourceBuilder for StdNixCandidateSourceBuilder {
             Ok(source)
         })();
 
-        let _ = fs::remove_dir_all(&staging);
+        let _ = fs::remove_dir_all(&work);
         result
     }
 }
@@ -213,11 +216,11 @@ impl RootSystemSpecCandidateProducer {
         }
     }
 
-    /// Validate one backend-neutral SystemSpec and derive all backend/native identity in root.
+    /// Validate a backend-neutral SystemSpec and derive every native identity in root.
     ///
-    /// The requester controls the semantic SystemSpec only. Candidate id, manifest id,
-    /// immutable source, installable attribute, translation and causal receipt are
-    /// generated or recomputed inside this boundary.
+    /// The requester controls only semantic SystemSpec state. Candidate id, manifest id,
+    /// immutable source, installable attribute, translation, timestamp and causal receipt
+    /// are generated or recomputed inside this boundary.
     pub fn produce<B: CandidateSourceBuilder>(
         &self,
         requester_system_bus_name: &str,
@@ -231,13 +234,11 @@ impl RootSystemSpecCandidateProducer {
 
         let spec = parse_canonical_system_spec(canonical_spec_text)
             .map_err(CandidateProducerError::SystemSpec)?;
-        let translation = NixOsBackend::translate(&spec)
-            .map_err(CandidateProducerError::Backend)?;
+        let translation = NixOsBackend::translate(&spec).map_err(CandidateProducerError::Backend)?;
         let source = source_builder
             .build_immutable_source(&spec, &translation)
             .map_err(CandidateProducerError::Source)?;
-        validate_canonical_store_subpath(&source)
-            .map_err(CandidateProducerError::Source)?;
+        validate_canonical_store_subpath(&source).map_err(CandidateProducerError::Source)?;
 
         let nonce = random_hex_128().map_err(CandidateProducerError::RandomSource)?;
         let manifest_id = format!("manifest:systemspec-{nonce}");
@@ -329,31 +330,29 @@ impl RootSystemSpecCandidateProducer {
             return Err(CandidateProducerError::ReceiptConflict);
         }
 
-        if let Err(error) = create_root_file(
+        if let Err(error) = create_protected_file(
             &manifest_path,
             &canonical_trusted_candidate(&manifest),
-            self.expected_owner_uid,
         ) {
             let _ = fs::remove_file(&source_gcroot);
-            return Err(error);
+            return Err(CandidateProducerError::Io(error));
         }
-        if let Err(error) = create_root_file(
+        if let Err(error) = create_protected_file(
             &receipt_path,
             &canonical_candidate_receipt(&receipt),
-            self.expected_owner_uid,
         ) {
             let _ = fs::remove_file(&manifest_path);
             let _ = fs::remove_file(&source_gcroot);
-            return Err(error);
+            return Err(CandidateProducerError::Io(error));
         }
-        sync_dir(&self.manifest_root).map_err(CandidateProducerError::Io)?;
-        sync_dir(&self.receipt_root).map_err(CandidateProducerError::Io)?;
-        sync_dir(&self.source_gcroot_root).map_err(CandidateProducerError::Io)?;
 
         validate_root_file(&manifest_path, self.expected_owner_uid)
             .map_err(|_| CandidateProducerError::InvalidCreatedManifest)?;
         validate_root_file(&receipt_path, self.expected_owner_uid)
             .map_err(|_| CandidateProducerError::InvalidCreatedReceipt)?;
+        sync_dir(&self.manifest_root).map_err(CandidateProducerError::Io)?;
+        sync_dir(&self.receipt_root).map_err(CandidateProducerError::Io)?;
+        sync_dir(&self.source_gcroot_root).map_err(CandidateProducerError::Io)?;
 
         Ok(ProducedCandidateManifest {
             manifest,
@@ -401,8 +400,7 @@ impl RootSystemSpecCandidateProducer {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(CandidateProducerError::Io(error.to_string())),
         }
-        symlink(source, &root)
-            .map_err(|error| CandidateProducerError::Io(error.to_string()))?;
+        symlink(source, &root).map_err(|error| CandidateProducerError::Io(error.to_string()))?;
         Ok(root)
     }
 }
@@ -820,30 +818,16 @@ fn write_file(path: &Path, text: &str, mode: u32) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn create_root_file(
-    path: &Path,
-    text: &str,
-    expected_owner_uid: u32,
-) -> Result<(), CandidateProducerError> {
+fn create_protected_file(path: &Path, text: &str) -> Result<(), String> {
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(0o600)
         .open(path)
-        .map_err(|error| CandidateProducerError::Io(error.to_string()))?;
+        .map_err(|error| error.to_string())?;
     file.write_all(text.as_bytes())
         .and_then(|_| file.sync_all())
-        .map_err(|error| CandidateProducerError::Io(error.to_string()))?;
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|error| CandidateProducerError::Io(error.to_string()))?;
-    if !metadata.is_file()
-        || metadata.file_type().is_symlink()
-        || metadata.uid() != expected_owner_uid
-        || metadata.permissions().mode() & 0o777 != 0o600
-    {
-        return Err(CandidateProducerError::InvalidCreatedManifest);
-    }
-    Ok(())
+        .map_err(|error| error.to_string())
 }
 
 fn sync_dir(path: &Path) -> Result<(), String> {
@@ -927,10 +911,10 @@ mod tests {
                 construction_mode: SystemConstructionMode::AiDesigned,
                 priorities: vec![SystemPriority::Reliability, SystemPriority::Energy],
                 features: vec![
-                    SystemFeatureSelection::enabled("pipewire"),
-                    SystemFeatureSelection::disabled("printing"),
                     SystemFeatureSelection::enabled("bluetooth"),
                     SystemFeatureSelection::enabled("hyprland"),
+                    SystemFeatureSelection::enabled("pipewire"),
+                    SystemFeatureSelection::disabled("printing"),
                 ],
             },
             experience_profile: Some(ExperienceProfileId::from("experience:hyprland")),
@@ -946,11 +930,15 @@ mod tests {
 
     #[test]
     fn feature_order_is_canonicalized() {
-        let text = canonical_system_spec(&spec());
+        let mut unordered = spec();
+        unordered.profile.features.reverse();
+        let text = canonical_system_spec(&unordered);
         let bluetooth = text.find("626c7565746f6f7468").expect("bluetooth");
         let hyprland = text.find("687970726c616e64").expect("hyprland");
         let pipewire = text.find("7069706577697265").expect("pipewire");
-        assert!(bluetooth < hyprland && hyprland < pipewire);
+        let printing = text.find("7072696e74696e67").expect("printing");
+        assert!(bluetooth < hyprland && hyprland < pipewire && pipewire < printing);
+        assert_eq!(parse_canonical_system_spec(&text), Ok(spec()));
     }
 
     #[test]
