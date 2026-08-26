@@ -21,6 +21,7 @@ members = [
     "backends/blob-nix-nixos-materialization-authority",
     "backends/blob-nix-nixos-materialization-begin",
     "backends/blob-nix-nixos-candidate-producer",
+    "backends/blob-nix-nixos-materialization-begin-queue",
 ]
 exclude = [
     "renderers/blob-surface-slint",
