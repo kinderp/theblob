@@ -9,3 +9,4 @@ description = "Trusted candidate manifest and root materialization begin boundar
 [dependencies]
 blob-core = { path = "../../crates/blob-core" }
 blob-nix-nixos-materialization-authority = { path = "../blob-nix-nixos-materialization-authority" }
+blob-nix-nixos-request-publisher = { path = "../blob-nix-nixos-request-publisher" }
