@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for validation in a disposable NixOS VM. Physical-node execution remains disabled.
+Accepted and validated in a disposable NixOS VM. Physical-node execution remains disabled.
 
 ## Context
 
@@ -44,7 +44,7 @@ Root then:
 10. publishes a root-owned candidate-manifest receipt containing the canonical SystemSpec and translation evidence;
 11. retains the immutable candidate source through a root-owned Nix GC root.
 
-The resulting manifest can then be consumed unchanged by ADR-0037 `Begin(manifest_id)`.
+The resulting manifest is consumed unchanged by the ADR-0037 root materialization-begin coordinator.
 
 ## Canonical SystemSpec transport
 
@@ -58,17 +58,16 @@ It contains only fields already represented by the semantic `SystemSpec` contrac
 
 Feature entries are sorted canonically. Unknown fields or alternate serialization are rejected. This means a caller cannot append `raw-nix`, `--impure`, a source path or another native escape hatch while retaining a valid request.
 
-The D-Bus proof exposes:
+The public D-Bus surface proved by this checkpoint exposes only candidate production:
 
 ```text
 PrepareCandidate(canonical_system_spec: string)
   -> (manifest_id, evidence)
-
-Begin(manifest_id: string)
-  -> (materialization_operation_id, evidence)
 ```
 
-The root service obtains the requester identity from the D-Bus message header.
+The root service obtains the requester identity from the D-Bus message header. ADR-0037 independently proves that the materialization-begin public boundary accepts only `Begin(manifest_id)`.
+
+The composition proof intentionally invokes the same ADR-0037 root coordinator directly after manifest production. This keeps two independently established properties separate: ADR-0038 proves where the manifest came from; ADR-0037 proves what callers may supply when materialization begins.
 
 ## Causal provenance
 
@@ -97,9 +96,24 @@ The current Linux Pilot `SystemSpec` does not describe every machine-specific bo
 
 That base module is **trusted service/node configuration**, not caller input. ADR-0038 does not pretend it is portable semantic state. A later checkpoint should replace the fixed reference base with a validated node/hardware profile derived from read-only observation and enrollment policy.
 
-## Required proof
+## Latency boundary discovered by the proof
 
-The disposable KVM test must prove:
+The first composed KVM attempted to expose SystemSpec production and ADR-0037 `Begin(manifest_id)` as consecutive synchronous D-Bus calls. Candidate production completed, but real NixOS derivation resolution inside `Begin` exceeded both the default D-Bus client timeout and an explicit 120-second timeout.
+
+Increasing the timeout again would hide the architectural problem. A full Nix evaluation is long-running work and must not define the lifetime of an interactive RPC.
+
+Therefore:
+
+- ADR-0037 remains the authority contract for `Begin(manifest_id)`;
+- ADR-0038 composes with its root coordinator directly, where long-running evaluation can complete normally;
+- the production daemon must expose materialization begin as a durable asynchronous operation, e.g. enqueue/request-id plus status/result, with crash/restart reconciliation;
+- caller control must remain limited to the trusted manifest id even when that asynchronous transport is introduced.
+
+This is the next execution-boundary checkpoint, not a reason to weaken or bypass Nix evaluation.
+
+## Validated proof
+
+The disposable KVM test proves:
 
 1. the public producer accepts exactly one semantic SystemSpec string;
 2. an extra caller-selected source/native argument is rejected by D-Bus;
@@ -111,8 +125,8 @@ The disposable KVM test must prove:
 8. the candidate flake references only the trusted pinned nixpkgs source and `base.nix`/`generated.nix`, with no impure environment escape;
 9. manifest and causal receipt are root-owned mode 0600 and unreadable by the ordinary requester;
 10. a source GC root retains exactly the generated immutable source;
-11. the generated manifest feeds ADR-0037 `Begin(manifest_id)` without changing candidate/SystemSpec/source/installable identity;
-12. ADR-0037 still creates only the exact root-selected derivation/output and materialization GC root.
+11. the generated manifest feeds the ADR-0037 root coordinator without changing candidate/SystemSpec/source/installable identity;
+12. ADR-0037 creates only the exact root-selected derivation/output and materialization GC root.
 
 ## Safety boundary
 
@@ -142,9 +156,9 @@ Technician / UI / control-plane proposal
  trusted immutable candidate manifest
               |
               v
-     ADR-0037 Begin(manifest_id)
+ ADR-0037 materialization coordinator
 ```
 
 This preserves modularity: the AI Technician or another standalone planner may propose semantic system intent, while the trusted root producer remains deterministic and AI-independent.
 
-After this proof is green, the next work is candidate-manifest/source lifecycle (retirement, quota and orphan reconciliation), persistent causal-log linkage, and replacement of fixed reference-machine base scaffolding with a trusted node-specific profile before physical-hardware enablement is reconsidered.
+The next work is a durable asynchronous materialization-begin daemon (`enqueue -> running -> completed/failed` with restart reconciliation). After that: candidate-manifest/source lifecycle (retirement, quotas and orphan reconciliation), persistent causal-log linkage, and replacement of fixed reference-machine base scaffolding with a trusted node-specific profile before physical-hardware enablement is reconsidered.
