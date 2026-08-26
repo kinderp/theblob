@@ -1,0 +1,41 @@
+name: NixOS materialization begin boundary
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  materialization-begin-boundary-vm:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feature/nixos-materialization-begin-boundary-vm')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix with KVM support
+        uses: cachix/install-nix-action@v31
+        with:
+          enable_kvm: true
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prove caller can begin only from a trusted manifest id
+        working-directory: backends/blob-nix-nixos/nix/reference
+        run: |
+          set -o pipefail
+          nix build -L .#checks.x86_64-linux.materialization-begin-boundary 2>&1 | tee /tmp/materialization-begin-boundary.log
+
+      - name: Preserve compact failure tail
+        if: failure()
+        run: tail -n 220 /tmp/materialization-begin-boundary.log > /tmp/materialization-begin-boundary-tail.log
+
+      - name: Upload compact failure tail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: materialization-begin-boundary-failure-tail
+          path: /tmp/materialization-begin-boundary-tail.log
+          if-no-files-found: ignore
