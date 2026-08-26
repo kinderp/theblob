@@ -198,7 +198,7 @@ let
           None,
       )
       if registration == 0:
-          raise RuntimeError("failed to register D-Bus object")
+        raise RuntimeError("failed to register D-Bus object")
       GLib.MainLoop().run()
     '';
   };
@@ -271,7 +271,7 @@ in
         if args:
             tail += " " + " ".join(shlex.quote(value) for value in args)
         inner = (
-            "busctl --system call " + DEST + " " + PATH + " " + IFACE
+            "busctl --system --timeout=120s call " + DEST + " " + PATH + " " + IFACE
             + " " + method + tail + " 2>&1"
         )
         return machine.execute("su -s /bin/sh " + user + " -c " + shlex.quote(inner))
@@ -301,24 +301,19 @@ in
     assert spec.startswith("theblob-system-spec-v1\n"), spec
     assert spec.endswith("\n"), spec
 
-    # The public producer accepts exactly one semantic SystemSpec string. Extra
-    # caller-controlled source/native arguments are rejected by D-Bus itself.
     status, output = call("alice", "PrepareCandidate", "ss", spec, "/nix/store/evil")
     assert status != 0, (status, output)
     machine.succeed("test -z \"$(find " + MANIFESTS + " -maxdepth 1 -type f -print -quit)\"")
 
-    # Native configuration cannot be smuggled into the canonical semantic model.
     noncanonical = spec + "raw-nix=696d70757265\n"
     status, output = call("alice", "PrepareCandidate", "s", noncanonical)
     assert status != 0, (status, output)
     machine.succeed("test -z \"$(find " + MANIFESTS + " -maxdepth 1 -type f -print -quit)\"")
     machine.succeed("test -z \"$(find " + SOURCE_ROOTS + " -maxdepth 1 -type l -print -quit)\"")
 
-    # A valid SystemSpec is revalidated and translated in root. The caller does
-    # not choose manifest id, candidate id, Nix source or installable attribute.
     status, output = call("alice", "PrepareCandidate", "s", spec)
     assert status == 0, (status, output)
-    evidence = evidence_from(output, "candidate=customer" if False else "candidate=")
+    evidence = evidence_from(output, "candidate=")
     manifest_id = field(evidence, "manifest-id")
     candidate = field(evidence, "candidate")
     system_spec = field(evidence, "system-spec")
@@ -352,8 +347,6 @@ in
     machine.fail("grep -Fq 'builtins.getEnv' " + shlex.quote(source + "/flake.nix"))
     machine.fail("grep -Fq -- '--impure' " + shlex.quote(source + "/flake.nix"))
 
-    # Compose directly into ADR-0037. The Begin caller supplies only the manifest
-    # id; every Nix/native field must round-trip from the producer-owned manifest.
     status, begin_output = call("alice", "Begin", "s", manifest_id)
     assert status == 0, (status, begin_output)
     begin_evidence = evidence_from(begin_output, "derivation=")
@@ -376,8 +369,6 @@ in
     machine.succeed("test \"$(find " + DERIVATION_ROOTS + " -maxdepth 1 -type l | wc -l)\" = 1")
     assert machine.succeed("readlink $(find " + DERIVATION_ROOTS + " -maxdepth 1 -type l -print -quit)").strip() == derivation
 
-    # The candidate source remains retained by its manifest until a later
-    # lifecycle/GC checkpoint explicitly retires unused manifests.
     machine.succeed("test -L " + shlex.quote(source_gcroot))
     machine.succeed("test ! -e " + shlex.quote(expected))
   '';
