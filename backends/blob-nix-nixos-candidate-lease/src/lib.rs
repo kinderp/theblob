@@ -58,13 +58,11 @@ impl FileCandidateEnqueueLeaseStore {
     }
 
     /// Ensure the transient lease directory exists only beneath an already
-    /// protected parent. This is used by enqueue/startup so introducing leases
-    /// does not require every older VM/service definition to pre-create the new
-    /// child directory. Reclamation code should call `validate_layout` instead:
-    /// a missing lease root must never be interpreted as "no leases".
+    /// protected parent. Enqueue/startup may call this so introducing the lease
+    /// protocol remains upgrade-compatible with older service definitions.
     pub fn ensure_layout(&self) -> Result<(), CandidateEnqueueLeaseError> {
         match fs::symlink_metadata(&self.root) {
-            Ok(_) => self.validate_layout(),
+            Ok(_) => self.validate_existing_layout(),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 let parent = self
                     .root
@@ -76,16 +74,28 @@ impl FileCandidateEnqueueLeaseStore {
                 match builder.create(&self.root) {
                     Ok(()) => {
                         sync_dir(parent)?;
-                        self.validate_layout()
+                        self.validate_existing_layout()
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                        self.validate_layout()
+                        self.validate_existing_layout()
                     }
                     Err(error) => Err(CandidateEnqueueLeaseError::Io(error.to_string())),
                 }
             }
             Err(error) => Err(CandidateEnqueueLeaseError::Io(error.to_string())),
         }
+    }
+
+    /// Compatibility-facing validation used by queue startup. It is allowed to
+    /// create the dedicated child directory, but only after proving its parent.
+    pub fn validate_layout(&self) -> Result<(), CandidateEnqueueLeaseError> {
+        self.ensure_layout()
+    }
+
+    /// Strict validation for destructive lifecycle decisions. A missing lease
+    /// root is an error, never evidence that there are zero in-flight enqueues.
+    pub fn validate_existing_layout(&self) -> Result<(), CandidateEnqueueLeaseError> {
+        validate_protected_directory(&self.root, self.expected_owner_uid)
     }
 
     pub fn acquire(
@@ -121,7 +131,7 @@ impl FileCandidateEnqueueLeaseStore {
         &self,
         lease: &CandidateEnqueueLease,
     ) -> Result<(), CandidateEnqueueLeaseError> {
-        self.validate_layout()?;
+        self.validate_existing_layout()?;
         let path = self.path(lease);
         let observed = self.load_path(&path)?;
         if observed != *lease {
@@ -133,7 +143,7 @@ impl FileCandidateEnqueueLeaseStore {
     }
 
     pub fn list(&self) -> Result<Vec<CandidateEnqueueLease>, CandidateEnqueueLeaseError> {
-        self.validate_layout()?;
+        self.validate_existing_layout()?;
         let mut paths = fs::read_dir(&self.root)
             .map_err(|error| CandidateEnqueueLeaseError::Io(error.to_string()))?
             .map(|entry| {
@@ -174,10 +184,6 @@ impl FileCandidateEnqueueLeaseStore {
             hex_text(&lease.manifest_id),
             hex_text(&lease.request_id)
         ))
-    }
-
-    pub fn validate_layout(&self) -> Result<(), CandidateEnqueueLeaseError> {
-        validate_protected_directory(&self.root, self.expected_owner_uid)
     }
 
     fn load_path(&self, path: &Path) -> Result<CandidateEnqueueLease, CandidateEnqueueLeaseError> {
