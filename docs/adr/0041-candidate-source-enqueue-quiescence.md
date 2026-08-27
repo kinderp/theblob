@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for validation in a disposable NixOS KVM VM. Physical-node execution remains disabled.
+Validated in a disposable NixOS KVM VM. Physical-node execution remains disabled.
 
 ## Context
 
@@ -40,6 +40,8 @@ Before candidate selection state may be read, enqueue must:
 
 The second check is mandatory. It handles a retirement barrier that wins after the first check but before the lease becomes durable.
 
+Lease and barrier records are canonical, versioned and root-owned. Manifest identity is hex encoded, timestamps are parsed as integers, trailing/unknown fields are rejected, and path existence is checked with `symlink_metadata` so dangling symlinks cannot masquerade as missing state.
+
 ### Retirement side
 
 Candidate source retirement must:
@@ -49,9 +51,9 @@ Candidate source retirement must:
 3. invoke the existing ADR-0040 candidate-selection retirement proof;
 4. require quiescence again;
 5. atomically move `retiring -> retired` and fsync both directories;
-6. recover the exact immutable source identity from ADR-0040's durable `source-retained:` evidence;
+6. recover the exact immutable source identity from ADR-0040's durable indexed `source-retained:` evidence;
 7. verify the source GC root is still an exact symlink to that source;
-8. persist exact source-retirement evidence;
+8. persist canonical exact source-retirement evidence;
 9. remove and fsync the candidate source GC root.
 
 The `retired` marker is a permanent tombstone for that manifest id.
@@ -82,22 +84,30 @@ The `retiring` barrier remains durable and continues blocking future enqueue att
 
 Absence without exact durable source-retirement evidence is ambiguous and fails closed. A repeated retirement is accepted as already reclaimed only when its exact source-retirement receipt exists and matches the ADR-0040 source identity.
 
-## Required VM proof
+## Validated VM proof
 
-The disposable KVM test must prove:
+The disposable KVM proof validated the complete lifecycle:
 
-1. a valid trusted candidate can be enqueued through the lease-aware path;
-2. a safely terminal job exists so ADR-0040 candidate retirement is otherwise permitted;
-3. an enqueue process can be killed after publishing its lease but before publishing a durable job;
-4. source retirement publishes its barrier, returns `Busy`, and preserves manifest, producer receipt and source GC root;
-5. after the barrier is present, a new enqueue is rejected before candidate selection is removed;
-6. exclusive startup recovery removes exactly the abandoned pre-publication lease;
-7. retry retires selection, creates the permanent retired tombstone and releases the exact source GC root;
-8. exact source-retirement evidence exists before/with reclamation;
-9. repeated retirement is idempotent only with that evidence;
-10. a post-retirement enqueue remains rejected and cannot recreate a job;
-11. malformed, symlinked or ownership-conflicting lease/barrier state fails closed;
-12. a real Nix garbage-collection pass is safe after the source root leaves the lifecycle graph.
+1. a valid trusted candidate was enqueued through the lease-aware path;
+2. the begin job was safely cancelled before worker claim so ADR-0040 retirement was otherwise permitted;
+3. a separate enqueue process acquired the pre-manifest lease and was SIGKILLed before durable job publication, deliberately leaving an abandoned active lease;
+4. source retirement published its barrier, returned `Busy`, and preserved manifest, producer receipt and source GC root;
+5. while selection files still existed, a later enqueue was rejected by `Retiring` before candidate access;
+6. exclusive startup recovery removed exactly one abandoned pre-publication lease;
+7. retirement retry removed selection state, created the permanent `retired` tombstone, persisted exact source-retirement evidence and released the exact candidate source GC root;
+8. a repeated retirement returned the idempotent `AlreadyReclaimed` result only with exact durable evidence;
+9. a post-retirement enqueue was rejected by `Retired` and created no queued job;
+10. a root-owned malformed barrier was rejected as `Malformed`;
+11. a dangling symlink barrier was rejected as conflicting owner/type state rather than treated as absence;
+12. a real `nix-store --gc` pass completed after the candidate source root left the lifecycle graph.
+
+The general CI matrix on the same implementation SHA also passed Rust core, NixOS evaluation/materialization, Slint renderer and WASM component runtime.
+
+### Validation discoveries
+
+The first dedicated run stopped before VM execution because the NixOS Python test driver rejected one unused import. Only the test lint was corrected.
+
+The second run exercised the intended race successfully through `Busy`, barrier rejection and lease recovery, then exposed a parser defect in the new source-retirement wrapper: `evidence-count=...` was mistakenly treated as indexed `evidence-<n>=...`. The parser was corrected to read `evidence-count` separately and then consume only exact numeric evidence indices. No lease, barrier, retirement or authority rule was weakened.
 
 ## Safety boundary
 
@@ -112,7 +122,7 @@ This checkpoint does not:
 
 ## Consequence
 
-Candidate source retention can become bounded without guessing about in-flight enqueue state. The source-reclamation proof is now a handoff:
+Candidate source retention can now become bounded without guessing about in-flight enqueue state. The source-reclamation proof is a handoff:
 
 ```text
 trusted candidate source root
@@ -128,4 +138,4 @@ permanent retired tombstone + exact retirement receipt
 source GC root released
 ```
 
-After this checkpoint is validated, the next architectural work should link the existing stage-local receipts into a persistent cross-stage causal log and then derive a trusted node/hardware profile before physical-node enablement is reconsidered.
+The next architectural checkpoint should link the existing stage-local receipts into a persistent cross-stage causal log and then derive a trusted node/hardware profile before physical-node enablement is reconsidered.
