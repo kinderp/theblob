@@ -354,9 +354,16 @@ in
     def op_gcroot(operation):
         return DERIVATION_ROOTS + "/operation-" + operation.encode("utf-8").hex() + "-derivation"
 
+    def wait_for_bus_owner():
+        machine.wait_until_succeeds(
+            "busctl --system status " + DEST + " >/dev/null 2>&1",
+            timeout=120,
+        )
+
     machine.start()
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("blob-async-materialization-begin.service")
+    wait_for_bus_owner()
 
     manifest_id = root_produce_manifest()
     assert manifest_id.startswith("manifest:systemspec-"), manifest_id
@@ -409,10 +416,7 @@ in
 
     # Startup recovery requeues the stranded running record; the new worker claims
     # the same request and same preallocated operation. No second operation exists.
-    machine.wait_until_succeeds(
-        "busctl --system status " + DEST + " >/dev/null 2>&1",
-        timeout=120,
-    )
+    wait_for_bus_owner()
     code, output, state_after_restart, operation_after_restart = status("alice", request_id)
     assert code == 0, (code, output)
     assert state_after_restart in ("queued", "running", "completed"), state_after_restart
@@ -454,6 +458,7 @@ in
     completed_mtime = machine.succeed("stat -c %Y " + shlex.quote(completed_job)).strip()
     machine.succeed("systemctl restart blob-async-materialization-begin.service")
     machine.wait_for_unit("blob-async-materialization-begin.service")
+    wait_for_bus_owner()
     code, output, final_state, final_operation = status("alice", request_id)
     assert code == 0 and final_state == "completed", (code, output, final_state)
     assert final_operation == operation
