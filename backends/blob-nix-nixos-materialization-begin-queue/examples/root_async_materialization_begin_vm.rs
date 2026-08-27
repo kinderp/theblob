@@ -100,9 +100,13 @@ fn run() -> Result<(), String> {
             println!("requester-system-bus={}", job.requester_system_bus_name);
         }
         Mode::Recover => {
+            let released_enqueue_leases = queue
+                .reconcile_enqueue_leases()
+                .map_err(|error| format!("enqueue lease recovery rejected: {error:?}"))?;
             let recovered = queue
                 .recover_running()
                 .map_err(|error| format!("recovery rejected: {error:?}"))?;
+            println!("released-enqueue-leases={released_enqueue_leases}");
             println!("recovered={recovered}");
         }
         Mode::WorkOne => {
