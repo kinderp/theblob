@@ -58,6 +58,9 @@
         async-materialization-begin = pkgs.testers.runNixOSTest {
           imports = [ ./async-materialization-begin-test.nix ];
         };
+        materialization-lifecycle = pkgs.testers.runNixOSTest {
+          imports = [ ./materialization-lifecycle-test.nix ];
+        };
       };
     };
 }
