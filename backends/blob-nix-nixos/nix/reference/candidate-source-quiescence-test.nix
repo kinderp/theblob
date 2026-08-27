@@ -122,7 +122,6 @@ in
     machine.start()
     machine.wait_for_unit("multi-user.target")
 
-    # Stage one valid trusted candidate whose immutable source is a real Nix store path.
     render = (
         RENDER
         + " --manifest-id " + shlex.quote(manifest_id)
@@ -152,15 +151,12 @@ in
     machine.succeed("ln -s " + shlex.quote(SOURCE) + " " + shlex.quote(source_root))
     machine.succeed("test -L " + shlex.quote(source_root))
 
-    # Create one real durable begin job, then cancel it before worker claim. This
-    # gives lifecycle a terminal failed job with no native state, which is safely reclaimable.
     enqueue = machine.succeed(
         QUEUE
         + " --mode enqueue --sender :0.33 --uid 1000 --manifest-id "
         + shlex.quote(manifest_id)
     )
     request_id = field(enqueue, "request-id")
-    operation = field(enqueue, "operation")
     machine.succeed(
         LIFECYCLE
         + " --mode cancel --request-id " + shlex.quote(request_id)
@@ -183,8 +179,8 @@ in
     machine.wait_until_succeeds("! kill -0 " + holder_pid + " 2>/dev/null")
     machine.succeed("test $(find " + LEASE_ROOT + "/active -type f -name '*.lease' | wc -l) -eq 1")
 
-    # Retirement publishes its barrier, sees the abandoned active lease, and MUST
-    # fail closed. Candidate selection and source retention remain intact.
+    # Retirement must retain every candidate resource while a pre-publication
+    # lease survives.
     status, output = machine.execute(
         RETIRE
         + " --manifest-id " + shlex.quote(manifest_id)
@@ -196,8 +192,8 @@ in
     machine.succeed("test -f " + shlex.quote(producer_receipt))
     machine.succeed("test -L " + shlex.quote(source_root))
 
-    # Once the barrier is durable, every new enqueue is rejected before candidate
-    # access, even though selection state still physically exists at this point.
+    # The durable barrier rejects later enqueue before manifest access even while
+    # the selection files still physically exist.
     status, output = machine.execute(
         QUEUE
         + " --mode enqueue --sender :0.44 --uid 1000 --manifest-id "
@@ -206,14 +202,10 @@ in
     )
     assert status != 0 and "Retiring" in output, (status, output)
 
-    # Existing daemon-startup recovery semantics are the only authority allowed to
-    # clear the abandoned pre-publication lease after the old process is gone.
     recovery = machine.succeed(QUEUE + " --mode recover")
     assert field(recovery, "abandoned-enqueue-leases") == "1", recovery
     machine.succeed("test $(find " + LEASE_ROOT + "/active -type f -name '*.lease' | wc -l) -eq 0")
 
-    # Retry resumes the already-durable barrier, proves quiescence, retires
-    # selection, marks the manifest permanently retired, and removes the exact source root.
     retired = machine.succeed(
         RETIRE
         + " --manifest-id " + shlex.quote(manifest_id)
@@ -228,7 +220,6 @@ in
     machine.succeed("test -f " + SOURCE_RETIREMENTS + "/candidate-source-" + hx(manifest_id) + ".receipt")
     machine.succeed("test -f " + LEASE_ROOT + "/retired/" + hx(manifest_id) + ".barrier")
 
-    # Reclaim is idempotent only with exact durable evidence; source remains absent.
     retired_again = machine.succeed(
         RETIRE
         + " --manifest-id " + shlex.quote(manifest_id)
@@ -237,8 +228,6 @@ in
     )
     assert "source-retirement=AlreadyReclaimed" in retired_again, retired_again
 
-    # A post-retirement enqueue remains impossible and cannot recreate a job for
-    # a source whose GC root has been released.
     status, output = machine.execute(
         QUEUE
         + " --mode enqueue --sender :0.55 --uid 1000 --manifest-id "
@@ -248,8 +237,35 @@ in
     assert status != 0 and "Retired" in output, (status, output)
     machine.succeed("test $(find " + JOBS + "/queued -type f -name '*.job' | wc -l) -eq 0")
 
-    # The source root is truly gone from the lifecycle graph. GC is now allowed;
-    # whether the store path is collected immediately is left to Nix reachability.
+    # Root-owned but noncanonical barrier content must not be treated as a valid
+    # retirement state or as absence.
+    malformed_manifest = "manifest:malformed-barrier"
+    malformed_barrier = LEASE_ROOT + "/retiring/" + hx(malformed_manifest) + ".barrier"
+    machine.succeed("printf 'garbage\\n' > " + shlex.quote(malformed_barrier))
+    machine.succeed("chmod 0600 " + shlex.quote(malformed_barrier))
+    status, output = machine.execute(
+        QUEUE
+        + " --mode enqueue --sender :0.66 --uid 1000 --manifest-id "
+        + shlex.quote(malformed_manifest)
+        + " 2>&1"
+    )
+    assert status != 0 and "Malformed" in output, (status, output)
+
+    # A dangling symlink barrier must also be seen as conflicting state, never as
+    # a missing marker that allows enqueue to proceed to candidate access.
+    symlink_manifest = "manifest:symlink-barrier"
+    symlink_barrier = LEASE_ROOT + "/retiring/" + hx(symlink_manifest) + ".barrier"
+    machine.succeed("ln -s /var/lib/theblob/does-not-exist " + shlex.quote(symlink_barrier))
+    status, output = machine.execute(
+        QUEUE
+        + " --mode enqueue --sender :0.77 --uid 1000 --manifest-id "
+        + shlex.quote(symlink_manifest)
+        + " 2>&1"
+    )
+    assert status != 0 and "OwnerMismatch" in output, (status, output)
+
+    # The source root is truly gone from the lifecycle graph. A real Nix GC pass
+    # is therefore permitted; exact collection timing still depends on all Nix roots.
     machine.succeed("${pkgs.nix}/bin/nix-store --gc >/tmp/gc.log 2>&1")
   '';
 }
