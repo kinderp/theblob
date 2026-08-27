@@ -7,7 +7,7 @@ Cleanup is part of the trust boundary: deleting a manifest, source GC root, deri
 The first checkpoint provides two root-side components:
 
 - `RootSafeMaterializationFinalizer`: roots the exact admitted system closure **before** the existing completion boundary may release the derivation GC root.
-- `RootMaterializationLifecycleManager`: expires only safely-unclaimed queued work, rejects cancellation after native durable state exists, retires candidate artifacts only after every related begin job is safely terminal, retires terminal jobs only after candidate retirement is durable, and releases stale derivation roots only when an admitted closure root or terminal failure proves recovery no longer needs them.
+- `RootMaterializationLifecycleManager`: expires only safely-unclaimed queued work, rejects cancellation after native durable state exists, retires candidate **selection** state only after every related begin job is safely terminal, retires terminal jobs only after candidate retirement is durable, and releases stale derivation roots only when an admitted closure root or terminal failure proves recovery no longer needs them.
 
 Production roots include:
 
@@ -27,12 +27,12 @@ Key invariants:
 
 1. A pending materialization intent keeps its exact derivation GC root.
 2. An admission is lifecycle-valid only when its exact output closure has a matching root-owned GC root and the completed intent agrees with it.
-3. A completed begin job is **not** enough to retire a candidate; materialization completion and exact closure retention must already be durable.
+3. A completed begin job is **not** enough to retire a candidate from selection; materialization completion and exact closure retention must already be durable.
 4. A failed begin job is reclaimable only when no intent, admission, or operation GC root remains.
 5. Running work cannot be cancelled by this module.
 6. Queued cancellation/expiry is accepted only before native durable state exists; atomic rename races fail closed if the worker wins.
-7. Candidate deletion is ordered manifest -> producer receipt -> source GC root, so a crash can leak retention but cannot deliberately leave a selectable manifest whose source was unrooted.
+7. Candidate selection retirement removes the manifest and producer receipt but **retains the candidate source GC root**. This deliberately closes the `retire_candidate` vs already-in-flight enqueue race: an enqueue that had already loaded the manifest may fail later, but its source cannot become a use-after-GC. Source-root reclamation is deferred until enqueue and lifecycle share an exact quiescence/lease contract.
 8. Lifecycle decisions leave deterministic root-owned receipts. Receipt storage is bounded and mutations fail closed when the bound is reached.
 9. Unknown orphan roots are retained rather than guessed away.
 
-This checkpoint deliberately does **not** delete materialization admissions, completed intents, admitted output closure roots, or prepared activation records. Their retention boundary depends on the later activation lifecycle and causal-log checkpoint.
+This checkpoint deliberately does **not** reclaim candidate source GC roots, delete materialization admissions or completed intents, release admitted output closure roots, or delete prepared activation records. Their retention boundaries require later quiescence, activation-lifecycle and causal-log checkpoints.
