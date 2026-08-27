@@ -85,7 +85,6 @@ in
   };
 
   testScript = ''
-    import os
     import re
     import shlex
 
