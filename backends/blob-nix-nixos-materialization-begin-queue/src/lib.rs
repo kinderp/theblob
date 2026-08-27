@@ -7,6 +7,10 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use blob_core::{NodeId, SystemOperationId};
+use blob_nix_nixos_candidate_lease::{
+    CandidateEnqueueLease, CandidateEnqueueLeaseError, FileCandidateEnqueueLeaseStore,
+    DEFAULT_CANDIDATE_ENQUEUE_LEASE_ROOT,
+};
 use blob_nix_nixos_materialization_authority::{
     MaterializationAuthorityError, MaterializationIntent, MaterializationIntentSpec,
     NixMaterializationInspector, RootMaterializationAdmissionAuthority,
@@ -73,6 +77,7 @@ pub enum MaterializationBeginQueueError {
     OwnerMismatch,
     StateConflict,
     Manifest(String),
+    Lease(String),
     RandomSource(String),
     Clock(String),
     Io(String),
@@ -81,14 +86,16 @@ pub enum MaterializationBeginQueueError {
 pub struct FileMaterializationBeginQueue {
     root: PathBuf,
     candidate_store: FileTrustedMaterializationCandidateStore,
+    lease_store: FileCandidateEnqueueLeaseStore,
     expected_owner_uid: u32,
 }
 
 impl FileMaterializationBeginQueue {
     pub fn production_default() -> Self {
-        Self::new(
+        Self::new_with_lease_root(
             DEFAULT_BEGIN_JOB_ROOT,
             DEFAULT_TRUSTED_CANDIDATE_ROOT,
+            DEFAULT_CANDIDATE_ENQUEUE_LEASE_ROOT,
             0,
         )
     }
@@ -98,12 +105,27 @@ impl FileMaterializationBeginQueue {
         candidate_root: impl Into<PathBuf>,
         expected_owner_uid: u32,
     ) -> Self {
+        Self::new_with_lease_root(
+            root,
+            candidate_root,
+            DEFAULT_CANDIDATE_ENQUEUE_LEASE_ROOT,
+            expected_owner_uid,
+        )
+    }
+
+    pub fn new_with_lease_root(
+        root: impl Into<PathBuf>,
+        candidate_root: impl Into<PathBuf>,
+        lease_root: impl Into<PathBuf>,
+        expected_owner_uid: u32,
+    ) -> Self {
         Self {
             root: root.into(),
             candidate_store: FileTrustedMaterializationCandidateStore::new(
                 candidate_root,
                 expected_owner_uid,
             ),
+            lease_store: FileCandidateEnqueueLeaseStore::new(lease_root, expected_owner_uid),
             expected_owner_uid,
         }
     }
@@ -114,9 +136,11 @@ impl FileMaterializationBeginQueue {
 
     /// Enqueue long-running materialization work without doing Nix evaluation.
     ///
-    /// The manifest is validated before the durable job is published. Both the
-    /// request id and materialization operation id are generated inside root so
-    /// a later retry can reconcile exactly the same operation after a crash.
+    /// A durable candidate-use lease is published before the trusted manifest is
+    /// read. The queued job becomes the durable liveness record; only after that
+    /// job is fsynced is the transient enqueue lease released. Candidate source
+    /// retirement can therefore remove the manifest first and later prove that
+    /// no successful-but-not-yet-visible enqueue still exists.
     pub fn enqueue(
         &self,
         requester_uid: u32,
@@ -125,9 +149,6 @@ impl FileMaterializationBeginQueue {
     ) -> Result<MaterializationBeginJob, MaterializationBeginQueueError> {
         self.validate_layout()?;
         validate_sender(requester_system_bus_name)?;
-        self.candidate_store
-            .load(manifest_id)
-            .map_err(|error| MaterializationBeginQueueError::Manifest(format!("{error:?}")))?;
 
         for _ in 0..8 {
             let request_id = format!(
@@ -138,28 +159,91 @@ impl FileMaterializationBeginQueue {
                 "op:materialize-{}",
                 random_hex_128().map_err(MaterializationBeginQueueError::RandomSource)?
             ));
+            let acquired_at_unix_ms =
+                now_unix_ms().map_err(MaterializationBeginQueueError::Clock)?;
+            let lease = CandidateEnqueueLease {
+                manifest_id: manifest_id.to_owned(),
+                request_id: request_id.clone(),
+                operation: operation.clone(),
+                requester_uid,
+                requester_system_bus_name: requester_system_bus_name.to_owned(),
+                acquired_at_unix_ms,
+            };
+            self.lease_store.acquire(&lease).map_err(lease_error)?;
+
+            if let Err(error) = self.candidate_store.load(manifest_id) {
+                let _ = self.lease_store.release(&lease);
+                return Err(MaterializationBeginQueueError::Manifest(format!(
+                    "{error:?}"
+                )));
+            }
+
             let job = MaterializationBeginJob {
                 request_id: request_id.clone(),
                 requester_uid,
                 requester_system_bus_name: requester_system_bus_name.to_owned(),
                 manifest_id: manifest_id.to_owned(),
                 operation,
-                enqueued_at_unix_ms: now_unix_ms()
-                    .map_err(MaterializationBeginQueueError::Clock)?,
+                enqueued_at_unix_ms: acquired_at_unix_ms,
             };
             let path = self.job_path(MaterializationBeginJobState::Queued, &request_id);
             match create_job_file(&path, &canonical_begin_job(&job)) {
                 Ok(()) => {
                     sync_dir(&self.state_dir(MaterializationBeginJobState::Queued))?;
+                    // The job is now the durable visibility/liveness record. If
+                    // lease cleanup itself fails, returning the committed job is
+                    // safer than making the caller retry and allocate a second
+                    // operation; the leaked lease merely blocks later source GC.
+                    let _ = self.lease_store.release(&lease);
                     return Ok(job);
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(MaterializationBeginQueueError::Io(error.to_string())),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let _ = self.lease_store.release(&lease);
+                    continue;
+                }
+                Err(error) => {
+                    let _ = self.lease_store.release(&lease);
+                    return Err(MaterializationBeginQueueError::Io(error.to_string()));
+                }
             }
         }
         Err(MaterializationBeginQueueError::RandomSource(
             "could not allocate a unique begin request id".into(),
         ))
+    }
+
+    /// Reconcile enqueue leases after exclusive daemon startup ownership.
+    ///
+    /// A lease with no durable job was an enqueue interrupted before publication
+    /// and can be dropped. A lease whose exact job is visible has already handed
+    /// liveness to the queue record and can also be dropped. Any identity conflict
+    /// is retained by failing closed.
+    pub fn reconcile_enqueue_leases(&self) -> Result<usize, MaterializationBeginQueueError> {
+        self.validate_layout()?;
+        let leases = self.lease_store.list().map_err(lease_error)?;
+        let mut released = 0usize;
+        for lease in leases {
+            match self.find_status(&lease.request_id)? {
+                None => {
+                    self.lease_store.release(&lease).map_err(lease_error)?;
+                    released += 1;
+                }
+                Some(status) => {
+                    let job = status.job;
+                    if job.request_id != lease.request_id
+                        || job.manifest_id != lease.manifest_id
+                        || job.operation != lease.operation
+                        || job.requester_uid != lease.requester_uid
+                        || job.requester_system_bus_name != lease.requester_system_bus_name
+                    {
+                        return Err(MaterializationBeginQueueError::StateConflict);
+                    }
+                    self.lease_store.release(&lease).map_err(lease_error)?;
+                    released += 1;
+                }
+            }
+        }
+        Ok(released)
     }
 
     /// Claim one queued job by atomic rename. With one systemd-owned worker this
@@ -258,6 +342,21 @@ impl FileMaterializationBeginQueue {
     ) -> Result<MaterializationBeginJobStatus, MaterializationBeginQueueError> {
         self.validate_layout()?;
         validate_request_id(request_id)?;
+        let (state, job) = self
+            .find_status(request_id)?
+            .map(|status| (status.state, status.job))
+            .ok_or_else(|| MaterializationBeginQueueError::Missing(request_id.to_owned()))?;
+        if job.requester_uid != requester_uid {
+            return Err(MaterializationBeginQueueError::OwnerMismatch);
+        }
+        Ok(MaterializationBeginJobStatus { state, job })
+    }
+
+    fn find_status(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<MaterializationBeginJobStatus>, MaterializationBeginQueueError> {
+        validate_request_id(request_id)?;
         let mut observed = None;
         for state in [
             MaterializationBeginJobState::Queued,
@@ -270,15 +369,13 @@ impl FileMaterializationBeginQueue {
                 if observed.is_some() {
                     return Err(MaterializationBeginQueueError::StateConflict);
                 }
-                observed = Some((state, self.read_job_path(&path)?));
+                observed = Some(MaterializationBeginJobStatus {
+                    state,
+                    job: self.read_job_path(&path)?,
+                });
             }
         }
-        let (state, job) = observed
-            .ok_or_else(|| MaterializationBeginQueueError::Missing(request_id.to_owned()))?;
-        if job.requester_uid != requester_uid {
-            return Err(MaterializationBeginQueueError::OwnerMismatch);
-        }
-        Ok(MaterializationBeginJobStatus { state, job })
+        Ok(observed)
     }
 
     fn mark_terminal(
@@ -315,6 +412,7 @@ impl FileMaterializationBeginQueue {
     fn validate_layout(&self) -> Result<(), MaterializationBeginQueueError> {
         validate_directory(&self.root, self.expected_owner_uid)
             .map_err(|_| MaterializationBeginQueueError::InvalidLayout)?;
+        self.lease_store.validate_layout().map_err(lease_error)?;
         for state in [
             MaterializationBeginJobState::Queued,
             MaterializationBeginJobState::Running,
@@ -572,8 +670,7 @@ impl RecoverableMaterializationBeginCoordinator {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 symlink(derivation, &root)
                     .map_err(|error| RecoverableBeginError::Io(error.to_string()))?;
-                sync_dir(&self.gcroot_root)
-                    .map_err(RecoverableBeginError::Queue)?;
+                sync_dir(&self.gcroot_root).map_err(RecoverableBeginError::Queue)?;
             }
             Err(error) => return Err(RecoverableBeginError::Io(error.to_string())),
         }
@@ -606,8 +703,7 @@ impl RecoverableMaterializationBeginCoordinator {
     ) -> Result<(), RecoverableBeginError> {
         self.validate_gcroot_root()?;
         match fs::remove_file(self.gcroot_path(operation)) {
-            Ok(()) => sync_dir(&self.gcroot_root)
-                .map_err(RecoverableBeginError::Queue),
+            Ok(()) => sync_dir(&self.gcroot_root).map_err(RecoverableBeginError::Queue),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(RecoverableBeginError::Io(error.to_string())),
         }
@@ -851,6 +947,10 @@ fn nibble(value: u8) -> Result<u8, MaterializationBeginQueueError> {
         b'a'..=b'f' => Ok(value - b'a' + 10),
         _ => Err(MaterializationBeginQueueError::Malformed),
     }
+}
+
+fn lease_error(error: CandidateEnqueueLeaseError) -> MaterializationBeginQueueError {
+    MaterializationBeginQueueError::Lease(format!("{error:?}"))
 }
 
 #[cfg(test)]
