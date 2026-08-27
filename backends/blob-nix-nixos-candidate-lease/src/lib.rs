@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use blob_core::SystemOperationId;
@@ -57,11 +57,42 @@ impl FileCandidateEnqueueLeaseStore {
         &self.root
     }
 
+    /// Ensure the transient lease directory exists only beneath an already
+    /// protected parent. This is used by enqueue/startup so introducing leases
+    /// does not require every older VM/service definition to pre-create the new
+    /// child directory. Reclamation code should call `validate_layout` instead:
+    /// a missing lease root must never be interpreted as "no leases".
+    pub fn ensure_layout(&self) -> Result<(), CandidateEnqueueLeaseError> {
+        match fs::symlink_metadata(&self.root) {
+            Ok(_) => self.validate_layout(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let parent = self
+                    .root
+                    .parent()
+                    .ok_or(CandidateEnqueueLeaseError::InvalidLayout)?;
+                validate_protected_directory(parent, self.expected_owner_uid)?;
+                let mut builder = DirBuilder::new();
+                builder.mode(0o700);
+                match builder.create(&self.root) {
+                    Ok(()) => {
+                        sync_dir(parent)?;
+                        self.validate_layout()
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        self.validate_layout()
+                    }
+                    Err(error) => Err(CandidateEnqueueLeaseError::Io(error.to_string())),
+                }
+            }
+            Err(error) => Err(CandidateEnqueueLeaseError::Io(error.to_string())),
+        }
+    }
+
     pub fn acquire(
         &self,
         lease: &CandidateEnqueueLease,
     ) -> Result<(), CandidateEnqueueLeaseError> {
-        self.validate_layout()?;
+        self.ensure_layout()?;
         validate_lease(lease)?;
         if self.list()?.len() >= MAX_CANDIDATE_ENQUEUE_LEASES {
             return Err(CandidateEnqueueLeaseError::CapacityExceeded);
@@ -146,16 +177,7 @@ impl FileCandidateEnqueueLeaseStore {
     }
 
     pub fn validate_layout(&self) -> Result<(), CandidateEnqueueLeaseError> {
-        let metadata = fs::symlink_metadata(&self.root)
-            .map_err(|_| CandidateEnqueueLeaseError::InvalidLayout)?;
-        if metadata.file_type().is_symlink()
-            || !metadata.is_dir()
-            || metadata.uid() != self.expected_owner_uid
-            || metadata.permissions().mode() & 0o077 != 0
-        {
-            return Err(CandidateEnqueueLeaseError::InvalidLayout);
-        }
-        Ok(())
+        validate_protected_directory(&self.root, self.expected_owner_uid)
     }
 
     fn load_path(&self, path: &Path) -> Result<CandidateEnqueueLease, CandidateEnqueueLeaseError> {
@@ -294,6 +316,22 @@ fn decode_hex(value: &str) -> Result<String, CandidateEnqueueLeaseError> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     String::from_utf8(bytes).map_err(|_| CandidateEnqueueLeaseError::Malformed)
+}
+
+fn validate_protected_directory(
+    path: &Path,
+    expected_owner_uid: u32,
+) -> Result<(), CandidateEnqueueLeaseError> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| CandidateEnqueueLeaseError::InvalidLayout)?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_dir()
+        || metadata.uid() != expected_owner_uid
+        || metadata.permissions().mode() & 0o077 != 0
+    {
+        return Err(CandidateEnqueueLeaseError::InvalidLayout);
+    }
+    Ok(())
 }
 
 fn hex_text(value: &str) -> String {
