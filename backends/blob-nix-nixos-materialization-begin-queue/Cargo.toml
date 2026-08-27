@@ -8,5 +8,6 @@ description = "Durable asynchronous materialization-begin queue for NixOS"
 
 [dependencies]
 blob-core = { path = "../../crates/blob-core" }
+blob-nix-nixos-candidate-lease = { path = "../blob-nix-nixos-candidate-lease" }
 blob-nix-nixos-materialization-authority = { path = "../blob-nix-nixos-materialization-authority" }
 blob-nix-nixos-materialization-begin = { path = "../blob-nix-nixos-materialization-begin" }
