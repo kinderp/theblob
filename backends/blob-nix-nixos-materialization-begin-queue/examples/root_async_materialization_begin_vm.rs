@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use blob_core::NodeId;
+use blob_nix_nixos_candidate_lease::CandidateEnqueueLeaseManager;
 use blob_nix_nixos_materialization_authority::StdNixMaterializationInspector;
 use blob_nix_nixos_materialization_begin_queue::{
     FileMaterializationBeginQueue, MaterializationBeginJobState,
@@ -82,6 +83,7 @@ fn state_name(state: MaterializationBeginJobState) -> &'static str {
 fn run() -> Result<(), String> {
     let args = parse_args()?;
     let queue = FileMaterializationBeginQueue::production_default();
+    let leases = CandidateEnqueueLeaseManager::production_default();
 
     match args.mode {
         Mode::Enqueue => {
@@ -90,19 +92,43 @@ fn run() -> Result<(), String> {
             let manifest_id = args
                 .manifest_id
                 .ok_or_else(|| "missing --manifest-id".to_owned())?;
-            let job = queue
+
+            // The lease is acquired before the trusted manifest is read by the
+            // queue. A retirement barrier that appears concurrently either sees
+            // this durable lease and fails Busy, or wins first and makes this
+            // acquisition fail before candidate/source state is touched.
+            let lease = leases
+                .acquire_enqueue(&manifest_id)
+                .map_err(|error| format!("enqueue lease rejected: {error:?}"))?;
+            let result = queue
                 .enqueue(uid, &sender, &manifest_id)
-                .map_err(|error| format!("enqueue rejected: {error:?}"))?;
-            println!("request-id={}", job.request_id);
-            println!("operation={}", job.operation);
-            println!("manifest-id={}", job.manifest_id);
-            println!("requester-uid={}", job.requester_uid);
-            println!("requester-system-bus={}", job.requester_system_bus_name);
+                .map_err(|error| format!("enqueue rejected: {error:?}"));
+            match result {
+                Ok(job) => {
+                    // Once the queued job is durable, a failed lease cleanup is a
+                    // safe retention leak, not grounds to tell the caller the
+                    // enqueue failed and risk a duplicate retry.
+                    let _ = lease.release();
+                    println!("request-id={}", job.request_id);
+                    println!("operation={}", job.operation);
+                    println!("manifest-id={}", job.manifest_id);
+                    println!("requester-uid={}", job.requester_uid);
+                    println!("requester-system-bus={}", job.requester_system_bus_name);
+                }
+                Err(error) => return Err(error),
+            }
         }
         Mode::Recover => {
+            // Safe only on daemon startup after systemd has destroyed the old
+            // service control group. Any surviving active lease is therefore a
+            // pre-publication crash remnant and can be removed conservatively.
+            let abandoned = leases
+                .recover_abandoned_enqueue_leases()
+                .map_err(|error| format!("lease recovery rejected: {error:?}"))?;
             let recovered = queue
                 .recover_running()
                 .map_err(|error| format!("recovery rejected: {error:?}"))?;
+            println!("abandoned-enqueue-leases={abandoned}");
             println!("recovered={recovered}");
         }
         Mode::WorkOne => {
