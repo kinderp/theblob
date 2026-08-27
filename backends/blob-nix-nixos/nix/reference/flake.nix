@@ -55,6 +55,9 @@
         systemspec-candidate-producer = pkgs.testers.runNixOSTest {
           imports = [ ./systemspec-candidate-producer-test.nix ];
         };
+        async-materialization-begin = pkgs.testers.runNixOSTest {
+          imports = [ ./async-materialization-begin-test.nix ];
+        };
       };
     };
 }
