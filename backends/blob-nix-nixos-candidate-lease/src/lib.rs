@@ -10,6 +10,8 @@ pub const DEFAULT_CANDIDATE_LEASE_ROOT: &str = "/var/lib/theblob/candidate-enque
 const ACTIVE: &str = "active";
 const RETIRING: &str = "retiring";
 const RETIRED: &str = "retired";
+const LEASE_VERSION: &str = "theblob-candidate-enqueue-lease-v1";
+const BARRIER_VERSION: &str = "theblob-candidate-retirement-barrier-v1";
 const MAX_RECORD_BYTES: u64 = 16 * 1024;
 
 #[derive(Debug)]
@@ -49,14 +51,15 @@ impl Drop for CandidateEnqueueLease {
 
 impl CandidateEnqueueLease {
     pub fn release(mut self) -> Result<(), CandidateLeaseError> {
-        if !self.released {
-            match fs::remove_file(&self.path) {
-                Ok(()) => sync_dir(&self.active_dir)?,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(io_error(error)),
-            }
-            self.released = true;
+        if self.released {
+            return Ok(());
         }
+        match fs::remove_file(&self.path) {
+            Ok(()) => sync_dir(&self.active_dir)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_error(error)),
+        }
+        self.released = true;
         Ok(())
     }
 }
@@ -77,9 +80,9 @@ impl CandidateEnqueueLeaseManager {
         &self.root
     }
 
-    /// Root may create the dedicated lease subtree, but only beneath an already
+    /// Root may create only this dedicated subtree and only below an already
     /// trusted owner-only parent. Existing paths are never followed through a
-    /// symlink and must retain exact root ownership/mode.
+    /// symlink and must have exact ownership and mode.
     pub fn prepare_layout(&self) -> Result<(), CandidateLeaseError> {
         let parent = self.root.parent().ok_or(CandidateLeaseError::InvalidLayout)?;
         validate_directory(parent, self.expected_owner_uid)?;
@@ -90,36 +93,40 @@ impl CandidateEnqueueLeaseManager {
         Ok(())
     }
 
-    pub fn acquire_enqueue(&self, manifest_id: &str) -> Result<CandidateEnqueueLease, CandidateLeaseError> {
+    pub fn acquire_enqueue(
+        &self,
+        manifest_id: &str,
+    ) -> Result<CandidateEnqueueLease, CandidateLeaseError> {
         self.prepare_layout()?;
         validate_manifest_id(manifest_id)?;
         let key = hex_text(manifest_id);
-        if self.retired_path(&key).exists() {
-            return Err(CandidateLeaseError::Retired);
-        }
-        if self.retiring_path(&key).exists() {
-            return Err(CandidateLeaseError::Retiring);
-        }
+        self.reject_if_barred(&key, manifest_id)?;
 
         for _ in 0..8 {
             let token = random_hex_128().map_err(CandidateLeaseError::RandomSource)?;
             let path = self.active_dir().join(format!("{key}--{token}.lease"));
-            let body = format!(
-                "theblob-candidate-enqueue-lease-v1\nmanifest-id:{manifest_id}\ncreated-at-unix-ms:{}\n",
-                now_unix_ms().map_err(CandidateLeaseError::Clock)?
-            );
+            let created_at = now_unix_ms().map_err(CandidateLeaseError::Clock)?;
+            let body = canonical_record(LEASE_VERSION, manifest_id, created_at);
             match create_protected_file(&path, &body) {
                 Ok(()) => {
                     sync_dir(&self.active_dir())?;
-                    // Critical recheck: a retirement barrier may have won after
-                    // the first marker check but before this lease became durable.
-                    // The enqueue must not touch candidate/source state until this
+                    validate_record(
+                        &path,
+                        self.expected_owner_uid,
+                        LEASE_VERSION,
+                        manifest_id,
+                    )?;
+
+                    // Critical recheck: retirement may have won between the
+                    // first barrier check and durable lease publication. The
+                    // enqueue must not read candidate/source state until this
                     // second check succeeds.
-                    if self.retiring_path(&key).exists() || self.retired_path(&key).exists() {
+                    if let Err(error) = self.reject_if_barred(&key, manifest_id) {
                         let _ = fs::remove_file(&path);
                         let _ = sync_dir(&self.active_dir());
-                        return Err(CandidateLeaseError::Retiring);
+                        return Err(error);
                     }
+
                     return Ok(CandidateEnqueueLease {
                         path,
                         active_dir: self.active_dir(),
@@ -130,52 +137,82 @@ impl CandidateEnqueueLeaseManager {
                 Err(error) => return Err(io_error(error)),
             }
         }
-        Err(CandidateLeaseError::RandomSource("could not allocate lease token".into()))
+        Err(CandidateLeaseError::RandomSource(
+            "could not allocate lease token".into(),
+        ))
     }
 
-    /// Publish a durable one-way retirement barrier. Once present, new enqueue
-    /// leases fail before candidate state can be read. The marker is intentionally
-    /// retained across Busy results and crashes.
+    /// Publish a durable one-way retirement barrier. The barrier remains across
+    /// Busy results and crashes, so candidate selection can never silently reopen.
     pub fn begin_retirement(&self, manifest_id: &str) -> Result<(), CandidateLeaseError> {
         self.prepare_layout()?;
         validate_manifest_id(manifest_id)?;
         let key = hex_text(manifest_id);
-        if self.retired_path(&key).exists() {
+        let retired = self.retired_path(&key);
+        if path_present(&retired)? {
+            validate_record(
+                &retired,
+                self.expected_owner_uid,
+                BARRIER_VERSION,
+                manifest_id,
+            )?;
             return Ok(());
         }
-        let path = self.retiring_path(&key);
-        if !path.exists() {
-            let body = format!(
-                "theblob-candidate-retirement-barrier-v1\nmanifest-id:{manifest_id}\ncreated-at-unix-ms:{}\n",
-                now_unix_ms().map_err(CandidateLeaseError::Clock)?
-            );
-            match create_protected_file(&path, &body) {
+
+        let retiring = self.retiring_path(&key);
+        if !path_present(&retiring)? {
+            let created_at = now_unix_ms().map_err(CandidateLeaseError::Clock)?;
+            let body = canonical_record(BARRIER_VERSION, manifest_id, created_at);
+            match create_protected_file(&retiring, &body) {
                 Ok(()) => sync_dir(&self.retiring_dir())?,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(io_error(error)),
             }
         }
-        self.validate_marker(&path, manifest_id)?;
-        Ok(())
+        validate_record(
+            &retiring,
+            self.expected_owner_uid,
+            BARRIER_VERSION,
+            manifest_id,
+        )
     }
 
-    /// Proves quiescence only after the retirement barrier is durable. Late
-    /// enqueue attempts can create a lease file transiently, but their mandatory
-    /// post-create marker recheck rejects them before candidate/source access.
+    /// Quiescence is meaningful only after a durable barrier exists. Any active
+    /// lease for this manifest makes retirement retain the source and return Busy.
     pub fn require_quiescent(&self, manifest_id: &str) -> Result<(), CandidateLeaseError> {
         self.prepare_layout()?;
         validate_manifest_id(manifest_id)?;
         let key = hex_text(manifest_id);
-        let barrier = self.retiring_path(&key);
-        if !barrier.exists() && !self.retired_path(&key).exists() {
+        let retiring = self.retiring_path(&key);
+        let retired = self.retired_path(&key);
+        let retiring_present = path_present(&retiring)?;
+        let retired_present = path_present(&retired)?;
+        if !retiring_present && !retired_present {
             return Err(CandidateLeaseError::Retiring);
         }
-        if barrier.exists() {
-            self.validate_marker(&barrier, manifest_id)?;
+        if retiring_present {
+            validate_record(
+                &retiring,
+                self.expected_owner_uid,
+                BARRIER_VERSION,
+                manifest_id,
+            )?;
         }
+        if retired_present {
+            validate_record(
+                &retired,
+                self.expected_owner_uid,
+                BARRIER_VERSION,
+                manifest_id,
+            )?;
+        }
+
         for path in self.active_paths()? {
-            let text = read_protected_text(&path, self.expected_owner_uid)?;
-            if text.lines().any(|line| line == format!("manifest-id:{manifest_id}")) {
+            let record = parse_record(
+                &read_protected_text(&path, self.expected_owner_uid)?,
+                LEASE_VERSION,
+            )?;
+            if record.manifest_id == manifest_id {
                 return Err(CandidateLeaseError::Busy);
             }
         }
@@ -187,33 +224,54 @@ impl CandidateEnqueueLeaseManager {
         let key = hex_text(manifest_id);
         let retiring = self.retiring_path(&key);
         let retired = self.retired_path(&key);
-        if retired.exists() {
-            self.validate_marker(&retired, manifest_id)?;
-            return Ok(());
+        if path_present(&retired)? {
+            return validate_record(
+                &retired,
+                self.expected_owner_uid,
+                BARRIER_VERSION,
+                manifest_id,
+            );
         }
+        validate_record(
+            &retiring,
+            self.expected_owner_uid,
+            BARRIER_VERSION,
+            manifest_id,
+        )?;
         fs::rename(&retiring, &retired).map_err(io_error)?;
         sync_dir(&self.retiring_dir())?;
         sync_dir(&self.retired_dir())?;
-        Ok(())
+        validate_record(
+            &retired,
+            self.expected_owner_uid,
+            BARRIER_VERSION,
+            manifest_id,
+        )
     }
 
     pub fn require_retired(&self, manifest_id: &str) -> Result<(), CandidateLeaseError> {
         self.prepare_layout()?;
+        validate_manifest_id(manifest_id)?;
         let path = self.retired_path(&hex_text(manifest_id));
-        if !path.exists() {
+        if !path_present(&path)? {
             return Err(CandidateLeaseError::Retiring);
         }
-        self.validate_marker(&path, manifest_id)
+        validate_record(
+            &path,
+            self.expected_owner_uid,
+            BARRIER_VERSION,
+            manifest_id,
+        )
     }
 
-    /// Safe only when the caller has exclusive ownership of the enqueue daemon
-    /// after the previous service control group is gone. It removes abandoned
-    /// pre-publication leases; durable begin jobs are recovered independently.
+    /// Safe only at daemon startup after systemd has destroyed the previous
+    /// service control group. Durable begin jobs are recovered separately.
     pub fn recover_abandoned_enqueue_leases(&self) -> Result<usize, CandidateLeaseError> {
         self.prepare_layout()?;
         let mut removed = 0usize;
         for path in self.active_paths()? {
-            read_protected_text(&path, self.expected_owner_uid)?;
+            let text = read_protected_text(&path, self.expected_owner_uid)?;
+            let _ = parse_record(&text, LEASE_VERSION)?;
             fs::remove_file(&path).map_err(io_error)?;
             removed += 1;
         }
@@ -223,10 +281,30 @@ impl CandidateEnqueueLeaseManager {
         Ok(removed)
     }
 
-    fn validate_marker(&self, path: &Path, manifest_id: &str) -> Result<(), CandidateLeaseError> {
-        let text = read_protected_text(path, self.expected_owner_uid)?;
-        if !text.lines().any(|line| line == format!("manifest-id:{manifest_id}")) {
-            return Err(CandidateLeaseError::Malformed);
+    fn reject_if_barred(
+        &self,
+        key: &str,
+        manifest_id: &str,
+    ) -> Result<(), CandidateLeaseError> {
+        let retired = self.retired_path(key);
+        if path_present(&retired)? {
+            validate_record(
+                &retired,
+                self.expected_owner_uid,
+                BARRIER_VERSION,
+                manifest_id,
+            )?;
+            return Err(CandidateLeaseError::Retired);
+        }
+        let retiring = self.retiring_path(key);
+        if path_present(&retiring)? {
+            validate_record(
+                &retiring,
+                self.expected_owner_uid,
+                BARRIER_VERSION,
+                manifest_id,
+            )?;
+            return Err(CandidateLeaseError::Retiring);
         }
         Ok(())
     }
@@ -234,19 +312,88 @@ impl CandidateEnqueueLeaseManager {
     fn active_paths(&self) -> Result<Vec<PathBuf>, CandidateLeaseError> {
         let mut paths = fs::read_dir(self.active_dir())
             .map_err(io_error)?
-            .filter_map(Result::ok)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(io_error)?
+            .into_iter()
             .map(|entry| entry.path())
-            .filter(|path| path.extension().and_then(|v| v.to_str()) == Some("lease"))
+            .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("lease"))
             .collect::<Vec<_>>();
         paths.sort();
         Ok(paths)
     }
 
-    fn active_dir(&self) -> PathBuf { self.root.join(ACTIVE) }
-    fn retiring_dir(&self) -> PathBuf { self.root.join(RETIRING) }
-    fn retired_dir(&self) -> PathBuf { self.root.join(RETIRED) }
-    fn retiring_path(&self, key: &str) -> PathBuf { self.retiring_dir().join(format!("{key}.barrier")) }
-    fn retired_path(&self, key: &str) -> PathBuf { self.retired_dir().join(format!("{key}.barrier")) }
+    fn active_dir(&self) -> PathBuf {
+        self.root.join(ACTIVE)
+    }
+
+    fn retiring_dir(&self) -> PathBuf {
+        self.root.join(RETIRING)
+    }
+
+    fn retired_dir(&self) -> PathBuf {
+        self.root.join(RETIRED)
+    }
+
+    fn retiring_path(&self, key: &str) -> PathBuf {
+        self.retiring_dir().join(format!("{key}.barrier"))
+    }
+
+    fn retired_path(&self, key: &str) -> PathBuf {
+        self.retired_dir().join(format!("{key}.barrier"))
+    }
+}
+
+#[derive(Debug)]
+struct ParsedRecord {
+    manifest_id: String,
+}
+
+fn canonical_record(version: &str, manifest_id: &str, created_at_unix_ms: u64) -> String {
+    format!(
+        "{version}\nmanifest-id={}\ncreated-at-unix-ms={created_at_unix_ms}\n",
+        hex_text(manifest_id)
+    )
+}
+
+fn parse_record(text: &str, expected_version: &str) -> Result<ParsedRecord, CandidateLeaseError> {
+    let mut lines = text.split_terminator('\n');
+    if lines.next() != Some(expected_version) {
+        return Err(CandidateLeaseError::Malformed);
+    }
+    let manifest = lines
+        .next()
+        .and_then(|line| line.strip_prefix("manifest-id="))
+        .ok_or(CandidateLeaseError::Malformed)?;
+    let created = lines
+        .next()
+        .and_then(|line| line.strip_prefix("created-at-unix-ms="))
+        .ok_or(CandidateLeaseError::Malformed)?;
+    if lines.next().is_some() || !text.ends_with('\n') {
+        return Err(CandidateLeaseError::Malformed);
+    }
+    let manifest_id = decode_hex_text(manifest)?;
+    validate_manifest_id(&manifest_id)?;
+    let created_at_unix_ms = created
+        .parse::<u64>()
+        .map_err(|_| CandidateLeaseError::Malformed)?;
+    if canonical_record(expected_version, &manifest_id, created_at_unix_ms) != text {
+        return Err(CandidateLeaseError::Malformed);
+    }
+    Ok(ParsedRecord { manifest_id })
+}
+
+fn validate_record(
+    path: &Path,
+    owner: u32,
+    version: &str,
+    manifest_id: &str,
+) -> Result<(), CandidateLeaseError> {
+    let text = read_protected_text(path, owner)?;
+    let parsed = parse_record(&text, version)?;
+    if parsed.manifest_id != manifest_id {
+        return Err(CandidateLeaseError::Malformed);
+    }
+    Ok(())
 }
 
 fn validate_manifest_id(value: &str) -> Result<(), CandidateLeaseError> {
@@ -278,27 +425,52 @@ fn create_or_validate_directory(path: &Path, owner: u32) -> Result<(), Candidate
 }
 
 fn validate_directory(path: &Path, owner: u32) -> Result<(), CandidateLeaseError> {
-    let meta = fs::symlink_metadata(path).map_err(io_error)?;
-    if !meta.is_dir() || meta.file_type().is_symlink() || meta.uid() != owner || meta.permissions().mode() & 0o777 != 0o700 {
+    let metadata = fs::symlink_metadata(path).map_err(io_error)?;
+    if !metadata.is_dir()
+        || metadata.file_type().is_symlink()
+        || metadata.uid() != owner
+        || metadata.permissions().mode() & 0o777 != 0o700
+    {
         return Err(CandidateLeaseError::InvalidLayout);
     }
     Ok(())
 }
 
+fn path_present(path: &Path) -> Result<bool, CandidateLeaseError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(io_error(error)),
+    }
+}
+
 fn create_protected_file(path: &Path, body: &str) -> std::io::Result<()> {
-    let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(path)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)?;
     file.write_all(body.as_bytes())?;
     file.sync_all()?;
     Ok(())
 }
 
 fn read_protected_text(path: &Path, owner: u32) -> Result<String, CandidateLeaseError> {
-    let meta = fs::symlink_metadata(path).map_err(io_error)?;
-    if !meta.is_file() || meta.file_type().is_symlink() || meta.uid() != owner || meta.permissions().mode() & 0o777 != 0o600 || meta.len() > MAX_RECORD_BYTES {
+    let metadata = fs::symlink_metadata(path).map_err(io_error)?;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || metadata.uid() != owner
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.len() > MAX_RECORD_BYTES
+    {
         return Err(CandidateLeaseError::OwnerMismatch);
     }
     let mut text = String::new();
-    File::open(path).map_err(io_error)?.take(MAX_RECORD_BYTES + 1).read_to_string(&mut text).map_err(io_error)?;
+    File::open(path)
+        .map_err(io_error)?
+        .take(MAX_RECORD_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(io_error)?;
     if text.len() as u64 > MAX_RECORD_BYTES {
         return Err(CandidateLeaseError::Malformed);
     }
@@ -306,22 +478,46 @@ fn read_protected_text(path: &Path, owner: u32) -> Result<String, CandidateLease
 }
 
 fn sync_dir(path: &Path) -> Result<(), CandidateLeaseError> {
-    File::open(path).and_then(|f| f.sync_all()).map_err(io_error)
+    File::open(path).and_then(|file| file.sync_all()).map_err(io_error)
 }
 
-fn io_error(error: std::io::Error) -> CandidateLeaseError { CandidateLeaseError::Io(error.to_string()) }
+fn io_error(error: std::io::Error) -> CandidateLeaseError {
+    CandidateLeaseError::Io(error.to_string())
+}
 
 fn now_unix_ms() -> Result<u64, String> {
-    let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?;
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?;
     u64::try_from(duration.as_millis()).map_err(|_| "clock overflow".into())
 }
 
 fn random_hex_128() -> Result<String, String> {
     let mut bytes = [0u8; 16];
-    File::open("/dev/urandom").map_err(|e| e.to_string())?.read_exact(&mut bytes).map_err(|e| e.to_string())?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    File::open("/dev/urandom")
+        .map_err(|error| error.to_string())?
+        .read_exact(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn hex_text(value: &str) -> String {
-    value.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn decode_hex_text(value: &str) -> Result<String, CandidateLeaseError> {
+    if value.len() % 2 != 0 {
+        return Err(CandidateLeaseError::Malformed);
+    }
+    let mut bytes = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let text = std::str::from_utf8(pair).map_err(|_| CandidateLeaseError::Malformed)?;
+        let byte = u8::from_str_radix(text, 16).map_err(|_| CandidateLeaseError::Malformed)?;
+        bytes.push(byte);
+    }
+    String::from_utf8(bytes).map_err(|_| CandidateLeaseError::Malformed)
 }
