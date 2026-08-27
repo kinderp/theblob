@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for validation in a disposable NixOS VM. Physical-node execution remains disabled.
+Validated in a disposable NixOS KVM VM. Physical-node execution remains disabled.
 
 ## Context
 
@@ -85,6 +85,30 @@ Each destructive lifecycle decision creates a deterministic, root-owned mode-060
 
 These are decision/authorization receipts, not yet the global causal log. A receipt can therefore precede the filesystem mutation it authorizes; if a racing worker wins or a crash occurs, later code must still re-prove current state before mutation.
 
+## Validated VM proof
+
+The dedicated disposable KVM test validated the new lifecycle boundary with a small hermetic BusyBox materialization oracle. The proof exercised the same root-owned candidate, async-begin, exact derivation and admission contracts without rebuilding a complete NixOS closure merely to test garbage collection.
+
+The VM proved:
+
+1. a trusted root-owned candidate enters durable async begin and produces exactly one pending materialization intent and operation derivation GC root;
+2. a begin-completed queue job alone cannot retire its candidate while the materialization intent is still pending;
+3. safe finalization before realization fails and creates no admitted-closure root;
+4. the exact predicted derivation target can be realized by a normal non-root user;
+5. successful safe finalization creates the exact admitted-closure GC root, persists the matching admission/completed intent, and then releases the operation derivation root;
+6. an exact leftover derivation root can be reconciled away only when admission, completed intent and admitted closure root agree;
+7. an unknown orphan derivation root is reported as `OrphanRetained` and remains untouched;
+8. a real `nix-store --gc` after derivation-root release does not collect the admitted output because the new closure root has taken over liveness;
+9. candidate selection retirement removes the manifest and producer receipt while both candidate source GC root and admitted closure GC root remain;
+10. the terminal begin job cannot be retired before candidate-retirement evidence exists, and can be retired afterwards without deleting admission, completed intent or closure retention;
+11. stale queued work with no native durable state can expire;
+12. a queued job with an operation GC root cannot expire;
+13. explicit cancellation is requester-UID bound and running work is rejected;
+14. invalid lifecycle directory mode and a symlink planted at a deterministic receipt path both fail closed without moving the queued job;
+15. no live activation and no persistent `switch` or `boot` occurs.
+
+The general Rust, NixOS evaluation, Slint and WASM CI suite was also green on the same implementation SHA used by this first KVM validation.
+
 ## Non-goals in this checkpoint
 
 This checkpoint does not yet:
@@ -103,25 +127,6 @@ This checkpoint does not yet:
 - enable physical-node activation.
 
 These omissions are intentional: each requires an exact downstream liveness, concurrency or audit contract before deletion can be proved safe.
-
-## Required VM proof
-
-The disposable KVM proof must show:
-
-1. a trusted root-owned test candidate can enter durable async begin and reach a pending materialization intent;
-2. after the non-root exact build realizes the predicted output, safe finalization creates the exact admitted-closure GC root before completion releases the derivation root;
-3. the admission, completed intent and closure root match path-for-path;
-4. `nix-store --gc` cannot collect the admitted closure while that root exists;
-5. lifecycle retirement can remove the now-unused trusted manifest and producer receipt while the candidate source GC root and admitted closure root both remain;
-6. the completed begin job can be retired only after candidate retirement evidence exists;
-7. a stale queued job with no native durable state can expire safely;
-8. a queued job with an operation GC root is not expired;
-9. explicit cancellation of a still-queued owned job succeeds, while cancellation of running work is rejected;
-10. malformed, symlinked or root-ownership-conflicting lifecycle state fails closed;
-11. an unknown orphan derivation root is retained rather than guessed away;
-12. no live activation and no persistent `switch`/`boot` occurs.
-
-The trusted-candidate fixture for the GC oracle may use a tiny hermetic BusyBox derivation rather than a complete NixOS closure. ADR-0038 separately proves canonical `SystemSpec` -> trusted immutable candidate production, and ADR-0039 separately proves the public D-Bus async begin boundary. This checkpoint isolates the new retention/lifecycle contract instead of rebuilding a full NixOS system merely to exercise garbage collection.
 
 ## Consequence
 
