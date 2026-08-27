@@ -126,8 +126,9 @@ impl LifecyclePaths {
     }
 }
 
-/// Completes one exact materialization only after rooting the already-realized
-/// expected output. A failure after rooting intentionally leaks retention.
+/// Completes an exact materialization only after the already-realized expected
+/// output has its own GC root. A failure after retention intentionally leaks the
+/// root rather than allowing an admitted closure to become collectible.
 pub struct RootSafeMaterializationFinalizer {
     authority: RootMaterializationAdmissionAuthority,
     boundary: RootMaterializationBeginBoundary,
@@ -416,6 +417,12 @@ impl RootMaterializationLifecycleManager {
         }
     }
 
+    /// Retires candidate *selection* state only. The candidate source GC root is
+    /// deliberately retained in this checkpoint. This makes an enqueue that had
+    /// already loaded the manifest before retirement fail safe (it may later fail
+    /// because the manifest is absent, but it cannot become a use-after-GC).
+    /// Reclaiming source roots requires a shared enqueue/retirement quiescence
+    /// contract and is intentionally deferred.
     pub fn retire_candidate(
         &self,
         manifest_id: &str,
@@ -458,19 +465,16 @@ impl RootMaterializationLifecycleManager {
             now_unix_ms,
             jobs.first().map(|value| &value.job),
             &[
-                format!("source:{}", candidate.immutable_flake_root.display()),
+                format!("source-retained:{}", candidate.immutable_flake_root.display()),
                 format!("terminal-jobs:{}", jobs.len()),
+                "decision:selection-retired-source-retained".into(),
             ],
         )?;
 
-        // Source retention is removed last. A crash can leak retention but cannot
-        // deliberately leave a selectable manifest pointing at an unrooted source.
         fs::remove_file(self.candidate_manifest_path(manifest_id)).map_err(io_error)?;
         sync_dir(&self.paths.candidate_root)?;
         fs::remove_file(self.candidate_producer_receipt_path(manifest_id)).map_err(io_error)?;
-        sync_dir(&self.paths.candidate_receipt_root)?;
-        fs::remove_file(self.candidate_source_gcroot_path(manifest_id)).map_err(io_error)?;
-        sync_dir(&self.paths.candidate_source_gcroot_root)
+        sync_dir(&self.paths.candidate_receipt_root)
     }
 
     pub fn retire_terminal_job(
