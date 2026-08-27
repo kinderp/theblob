@@ -856,13 +856,6 @@ impl RootMaterializationLifecycleManager {
         ))
     }
 
-    fn admitted_closure_gcroot_path(&self, operation: &SystemOperationId) -> PathBuf {
-        self.paths.admitted_closure_gcroot_root.join(format!(
-            "operation-{}-closure",
-            hex_text(operation.as_str())
-        ))
-    }
-
     fn candidate_manifest_path(&self, manifest_id: &str) -> PathBuf {
         self.paths.candidate_root.join(format!(
             "manifest-{}.candidate",
