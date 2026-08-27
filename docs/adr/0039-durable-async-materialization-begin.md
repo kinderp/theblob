@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for validation in a disposable NixOS VM. Physical-node execution remains disabled.
+Accepted and validated in a disposable NixOS KVM VM. Physical-node execution remains disabled.
 
 ## Context
 
@@ -102,6 +102,12 @@ The KVM test must prove:
 12. restarting the daemon after completion does not replay or mutate the completed job;
 13. an unknown request id fails closed.
 
+## Validation result
+
+The disposable KVM proof is green. The test enqueued the trusted manifest through the short D-Bus RPC, observed the preallocated operation-specific derivation GC root, then sent `SIGKILL` to the complete systemd service control group while Nix work was active. After systemd restart, startup recovery reclaimed the same durable request and the same preallocated materialization operation. The recovered job reached `completed` with exactly one pending intent and one exact derivation GC root; no duplicate operation was created.
+
+A first validation run exposed only a test synchronization race after an additional restart of an already-completed job: systemd had reported the service active before the restarted process had reacquired its D-Bus name. The proof now waits explicitly for the D-Bus name owner before querying status. No queue, worker, recovery, authorization or identity semantics were changed by that correction.
+
 ## Safety boundary
 
 This checkpoint still does not permit:
@@ -135,4 +141,4 @@ queued -> running -- crash --> queued -> running
                           exact pending materialization intent
 ```
 
-After this proof is green, the next Linux Pilot work is candidate/source and begin-job lifecycle (retention, cancellation/expiry, quotas, orphan reconciliation), persistent causal-log linkage, and trusted node/hardware profile derivation before physical-node activation is reconsidered.
+The next Linux Pilot work is candidate/source and begin-job lifecycle (retention, cancellation/expiry, quotas, orphan reconciliation), persistent causal-log linkage, and trusted node/hardware profile derivation before physical-node activation is reconsidered.
