@@ -6,7 +6,9 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use blob_nix_nixos_candidate_lease::{CandidateEnqueueLeaseManager, CandidateLeaseError};
-use blob_nix_nixos_materialization_lifecycle::{LifecycleError, LifecyclePaths, RootMaterializationLifecycleManager};
+use blob_nix_nixos_materialization_lifecycle::{
+    LifecycleError, LifecyclePaths, RootMaterializationLifecycleManager,
+};
 
 pub const DEFAULT_SOURCE_RETIREMENT_RECEIPT_ROOT: &str =
     "/var/lib/theblob/materialization-lifecycle/source-retirements";
@@ -67,15 +69,12 @@ impl RootCandidateSourceRetirement {
         }
     }
 
-    /// Retire selection and source in two monotonic phases:
+    /// Retire selection and source in monotonic phases:
     ///
     /// 1. publish the enqueue retirement barrier and prove no pre-barrier lease remains;
     /// 2. retire candidate selection using the existing lifecycle proof;
-    /// 3. mark the barrier retired, then release the exact source GC root named by
-    ///    the durable candidate-retirement receipt.
-    ///
-    /// The retired barrier is never removed. Therefore an enqueue that starts
-    /// after source reclamation cannot become selectable again accidentally.
+    /// 3. prove quiescence again and make the barrier permanently retired;
+    /// 4. persist exact source-retirement evidence and release the exact source GC root.
     pub fn retire_candidate_and_source(
         &self,
         manifest_id: &str,
@@ -177,19 +176,39 @@ impl RootCandidateSourceRetirement {
             hex_text("candidate-retirement"),
             hex_text(manifest_id)
         );
-        if !text.starts_with(&expected_prefix) {
+        if !text.starts_with(&expected_prefix) || !text.ends_with('\n') {
             return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
         }
-        for line in text.lines() {
-            let Some(encoded) = line.strip_prefix("evidence-") else { continue };
-            let Some((_, value)) = encoded.split_once('=') else { continue };
+
+        let evidence_count = text
+            .lines()
+            .find_map(|line| line.strip_prefix("evidence-count="))
+            .ok_or(CandidateSourceRetirementError::InvalidSelectionReceipt)?
+            .parse::<usize>()
+            .map_err(|_| CandidateSourceRetirementError::InvalidSelectionReceipt)?;
+        if evidence_count > 4096 {
+            return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
+        }
+
+        let lines = text.lines().collect::<Vec<_>>();
+        for index in 0..evidence_count {
+            let prefix = format!("evidence-{index}=");
+            let mut values = lines
+                .iter()
+                .filter_map(|line| line.strip_prefix(&prefix));
+            let value = values
+                .next()
+                .ok_or(CandidateSourceRetirementError::InvalidSelectionReceipt)?;
+            if values.next().is_some() {
+                return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
+            }
             let decoded = decode_hex_text(value)?;
             if let Some(source) = decoded.strip_prefix("source-retained:") {
-                let path = PathBuf::from(source);
-                if !is_exact_nix_store_path(&path) {
+                let source = PathBuf::from(source);
+                if !is_exact_nix_store_path(&source) {
                     return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
                 }
-                return Ok(path);
+                return Ok(source);
             }
         }
         Err(CandidateSourceRetirementError::InvalidSelectionReceipt)
@@ -206,15 +225,15 @@ impl RootCandidateSourceRetirement {
         if path.exists() {
             return self.validate_source_retirement_receipt(manifest_id, source);
         }
-        let text = format!(
-            "theblob-candidate-source-retirement-v1\nmanifest-id={}\nsource={}\noccurred-at-unix-ms={}\ndecision={}\n",
-            hex_text(manifest_id),
-            hex_text(&source.display().to_string()),
+        let text = canonical_source_retirement_receipt(
+            manifest_id,
+            source,
             now_unix_ms,
-            hex_text(decision),
+            decision,
         );
         create_protected_file(&path, &text)?;
-        sync_dir(&self.receipt_root)
+        sync_dir(&self.receipt_root)?;
+        self.validate_source_retirement_receipt(manifest_id, source)
     }
 
     fn validate_source_retirement_receipt(
@@ -226,23 +245,56 @@ impl RootCandidateSourceRetirement {
             &self.source_retirement_receipt_path(manifest_id),
             self.expected_owner_uid,
         )?;
-        let required = [
-            "theblob-candidate-source-retirement-v1".to_owned(),
-            format!("manifest-id={}", hex_text(manifest_id)),
-            format!("source={}", hex_text(&source.display().to_string())),
-        ];
-        let lines = text.lines().collect::<Vec<_>>();
-        if required
-            .iter()
-            .any(|expected| !lines.iter().any(|line| *line == expected))
-        {
+        let mut lines = text.lines();
+        if lines.next() != Some("theblob-candidate-source-retirement-v1") {
+            return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
+        }
+        if lines.next() != Some(format!("manifest-id={}", hex_text(manifest_id)).as_str()) {
+            return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
+        }
+        if lines.next() != Some(format!("source={}", hex_text(&source.display().to_string())).as_str()) {
+            return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
+        }
+        let occurred = lines
+            .next()
+            .and_then(|line| line.strip_prefix("occurred-at-unix-ms="))
+            .ok_or(CandidateSourceRetirementError::InvalidSelectionReceipt)?
+            .parse::<u64>()
+            .map_err(|_| CandidateSourceRetirementError::InvalidSelectionReceipt)?;
+        let decision_hex = lines
+            .next()
+            .and_then(|line| line.strip_prefix("decision="))
+            .ok_or(CandidateSourceRetirementError::InvalidSelectionReceipt)?;
+        let decision = decode_hex_text(decision_hex)?;
+        if lines.next().is_some() || !text.ends_with('\n') {
+            return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
+        }
+        if canonical_source_retirement_receipt(manifest_id, source, occurred, &decision) != text {
             return Err(CandidateSourceRetirementError::InvalidSelectionReceipt);
         }
         Ok(())
     }
 }
 
-fn validate_directory(path: &Path, expected_owner_uid: u32) -> Result<(), CandidateSourceRetirementError> {
+fn canonical_source_retirement_receipt(
+    manifest_id: &str,
+    source: &Path,
+    now_unix_ms: u64,
+    decision: &str,
+) -> String {
+    format!(
+        "theblob-candidate-source-retirement-v1\nmanifest-id={}\nsource={}\noccurred-at-unix-ms={}\ndecision={}\n",
+        hex_text(manifest_id),
+        hex_text(&source.display().to_string()),
+        now_unix_ms,
+        hex_text(decision),
+    )
+}
+
+fn validate_directory(
+    path: &Path,
+    expected_owner_uid: u32,
+) -> Result<(), CandidateSourceRetirementError> {
     let metadata = fs::symlink_metadata(path).map_err(io_error)?;
     if metadata.file_type().is_symlink()
         || !metadata.is_dir()
@@ -254,7 +306,10 @@ fn validate_directory(path: &Path, expected_owner_uid: u32) -> Result<(), Candid
     Ok(())
 }
 
-fn read_protected_text(path: &Path, expected_owner_uid: u32) -> Result<String, CandidateSourceRetirementError> {
+fn read_protected_text(
+    path: &Path,
+    expected_owner_uid: u32,
+) -> Result<String, CandidateSourceRetirementError> {
     let metadata = fs::symlink_metadata(path).map_err(io_error)?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
@@ -274,7 +329,10 @@ fn read_protected_text(path: &Path, expected_owner_uid: u32) -> Result<String, C
     Ok(text)
 }
 
-fn create_protected_file(path: &Path, text: &str) -> Result<(), CandidateSourceRetirementError> {
+fn create_protected_file(
+    path: &Path,
+    text: &str,
+) -> Result<(), CandidateSourceRetirementError> {
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -294,7 +352,11 @@ fn io_error(error: std::io::Error) -> CandidateSourceRetirementError {
 }
 
 fn hex_text(value: &str) -> String {
-    value.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn decode_hex_text(value: &str) -> Result<String, CandidateSourceRetirementError> {
@@ -313,7 +375,9 @@ fn decode_hex_text(value: &str) -> Result<String, CandidateSourceRetirementError
 }
 
 fn is_exact_nix_store_path(path: &Path) -> bool {
-    let Some(text) = path.to_str() else { return false };
+    let Some(text) = path.to_str() else {
+        return false;
+    };
     if !text.starts_with("/nix/store/") || text.ends_with('/') {
         return false;
     }
