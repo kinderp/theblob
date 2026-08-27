@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -77,8 +77,21 @@ impl CandidateEnqueueLeaseManager {
         &self.root
     }
 
+    /// Root may create the dedicated lease subtree, but only beneath an already
+    /// trusted owner-only parent. Existing paths are never followed through a
+    /// symlink and must retain exact root ownership/mode.
+    pub fn prepare_layout(&self) -> Result<(), CandidateLeaseError> {
+        let parent = self.root.parent().ok_or(CandidateLeaseError::InvalidLayout)?;
+        validate_directory(parent, self.expected_owner_uid)?;
+        create_or_validate_directory(&self.root, self.expected_owner_uid)?;
+        create_or_validate_directory(&self.active_dir(), self.expected_owner_uid)?;
+        create_or_validate_directory(&self.retiring_dir(), self.expected_owner_uid)?;
+        create_or_validate_directory(&self.retired_dir(), self.expected_owner_uid)?;
+        Ok(())
+    }
+
     pub fn acquire_enqueue(&self, manifest_id: &str) -> Result<CandidateEnqueueLease, CandidateLeaseError> {
-        self.validate_layout()?;
+        self.prepare_layout()?;
         validate_manifest_id(manifest_id)?;
         let key = hex_text(manifest_id);
         if self.retired_path(&key).exists() {
@@ -124,7 +137,7 @@ impl CandidateEnqueueLeaseManager {
     /// leases fail before candidate state can be read. The marker is intentionally
     /// retained across Busy results and crashes.
     pub fn begin_retirement(&self, manifest_id: &str) -> Result<(), CandidateLeaseError> {
-        self.validate_layout()?;
+        self.prepare_layout()?;
         validate_manifest_id(manifest_id)?;
         let key = hex_text(manifest_id);
         if self.retired_path(&key).exists() {
@@ -150,7 +163,7 @@ impl CandidateEnqueueLeaseManager {
     /// enqueue attempts can create a lease file transiently, but their mandatory
     /// post-create marker recheck rejects them before candidate/source access.
     pub fn require_quiescent(&self, manifest_id: &str) -> Result<(), CandidateLeaseError> {
-        self.validate_layout()?;
+        self.prepare_layout()?;
         validate_manifest_id(manifest_id)?;
         let key = hex_text(manifest_id);
         let barrier = self.retiring_path(&key);
@@ -185,7 +198,7 @@ impl CandidateEnqueueLeaseManager {
     }
 
     pub fn require_retired(&self, manifest_id: &str) -> Result<(), CandidateLeaseError> {
-        self.validate_layout()?;
+        self.prepare_layout()?;
         let path = self.retired_path(&hex_text(manifest_id));
         if !path.exists() {
             return Err(CandidateLeaseError::Retiring);
@@ -197,7 +210,7 @@ impl CandidateEnqueueLeaseManager {
     /// after the previous service control group is gone. It removes abandoned
     /// pre-publication leases; durable begin jobs are recovered independently.
     pub fn recover_abandoned_enqueue_leases(&self) -> Result<usize, CandidateLeaseError> {
-        self.validate_layout()?;
+        self.prepare_layout()?;
         let mut removed = 0usize;
         for path in self.active_paths()? {
             read_protected_text(&path, self.expected_owner_uid)?;
@@ -208,13 +221,6 @@ impl CandidateEnqueueLeaseManager {
             sync_dir(&self.active_dir())?;
         }
         Ok(removed)
-    }
-
-    fn validate_layout(&self) -> Result<(), CandidateLeaseError> {
-        for path in [&self.root, &self.active_dir(), &self.retiring_dir(), &self.retired_dir()] {
-            validate_directory(path, self.expected_owner_uid)?;
-        }
-        Ok(())
     }
 
     fn validate_marker(&self, path: &Path, manifest_id: &str) -> Result<(), CandidateLeaseError> {
@@ -248,6 +254,27 @@ fn validate_manifest_id(value: &str) -> Result<(), CandidateLeaseError> {
         return Err(CandidateLeaseError::InvalidManifestId);
     }
     Ok(())
+}
+
+fn create_or_validate_directory(path: &Path, owner: u32) -> Result<(), CandidateLeaseError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => validate_directory(path, owner),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let mut builder = DirBuilder::new();
+            builder.mode(0o700);
+            match builder.create(path) {
+                Ok(()) => {
+                    sync_dir(path.parent().ok_or(CandidateLeaseError::InvalidLayout)?)?;
+                    validate_directory(path, owner)
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    validate_directory(path, owner)
+                }
+                Err(error) => Err(io_error(error)),
+            }
+        }
+        Err(error) => Err(io_error(error)),
+    }
 }
 
 fn validate_directory(path: &Path, owner: u32) -> Result<(), CandidateLeaseError> {
