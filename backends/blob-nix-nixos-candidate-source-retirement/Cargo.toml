@@ -1,0 +1,11 @@
+[package]
+name = "blob-nix-nixos-candidate-source-retirement"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Quiescence-proved retirement of trusted NixOS candidate source GC roots"
+
+[dependencies]
+blob-nix-nixos-candidate-lease = { path = "../blob-nix-nixos-candidate-lease" }
+blob-nix-nixos-materialization-lifecycle = { path = "../blob-nix-nixos-materialization-lifecycle" }

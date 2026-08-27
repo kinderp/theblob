@@ -21,6 +21,8 @@ members = [
     "backends/blob-nix-nixos-materialization-authority",
     "backends/blob-nix-nixos-materialization-begin",
     "backends/blob-nix-nixos-candidate-producer",
+    "backends/blob-nix-nixos-candidate-lease",
+    "backends/blob-nix-nixos-candidate-source-retirement",
     "backends/blob-nix-nixos-materialization-begin-queue",
     "backends/blob-nix-nixos-materialization-lifecycle",
 ]

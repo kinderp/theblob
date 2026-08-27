@@ -61,6 +61,9 @@
         materialization-lifecycle = pkgs.testers.runNixOSTest {
           imports = [ ./materialization-lifecycle-test.nix ];
         };
+        candidate-source-quiescence = pkgs.testers.runNixOSTest {
+          imports = [ ./candidate-source-quiescence-test.nix ];
+        };
       };
     };
 }
