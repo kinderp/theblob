@@ -15,7 +15,10 @@ export component BlobShell inherits Window {
     in property <string> execution-output;
     in property <string> causal-summary;
     in property <int> active-page: 0;
-    in property <string> technician-status: "Ready · read-only demo projection";
+    in property <string> technician-title: "I’m watching this Workspace";
+    in property <string> technician-body: "Choose Explain, Teach or Prepare to project the current structured evidence.";
+    in property <string> technician-detail: "No AI model is used in this demo slice.";
+    in property <string> technician-status: "Ready · read-only evidence projection";
 
     callback navigate-now;
     callback navigate-workspace;
@@ -159,6 +162,9 @@ export component BlobShell inherits Window {
             TechnicianPanel {
                 context-summary: root.situation-summary;
                 verifier-summary: root.verifier-summary;
+                response-title: root.technician-title;
+                response-body: root.technician-body;
+                response-detail: root.technician-detail;
                 intent-status: root.technician-status;
                 explain => { root.technician-explain(); }
                 teach => { root.technician-teach(); }
