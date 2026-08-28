@@ -7,3 +7,4 @@ rust-version.workspace = true
 description = "Renderer-neutral Surface intent and navigation application layer for The Blob"
 
 [dependencies]
+blob-core = { path = "../blob-core" }
