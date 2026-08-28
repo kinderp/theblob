@@ -14,7 +14,20 @@ export component BlobShell inherits Window {
     in property <string> verifier-summary;
     in property <string> execution-output;
     in property <string> causal-summary;
+
+    in property <string> system-workspace-title: "Personal Computer";
+    in property <string> system-mode: "AI Designed";
+    in property <bool> bluetooth-enabled: false;
+    in property <string> bluetooth-label: "Bluetooth off";
+    in property <string> pipewire-label: "PipeWire enabled";
+    in property <string> printing-label: "Printing disabled";
+    in property <bool> system-proposal-pending: false;
+    in property <string> system-proposal-title: "";
+    in property <string> system-proposal-summary: "";
+    in property <string> system-proposal-diff: "";
+
     in property <int> active-page: 0;
+    in-out property <bool> technician-open: true;
     in property <string> technician-title: "I’m watching this Workspace";
     in property <string> technician-body: "Choose Explain, Teach or Prepare to project the current structured evidence.";
     in property <string> technician-detail: "No AI model is used in this demo slice.";
@@ -29,10 +42,12 @@ export component BlobShell inherits Window {
     callback technician-explain;
     callback technician-teach;
     callback technician-prepare;
+    callback system-propose-bluetooth;
+    callback system-clear-proposal;
 
     title: "The Blob";
-    width: 1280px;
-    height: 780px;
+    width: 1440px;
+    height: 900px;
     background: BlobTheme.canvas;
 
     VerticalLayout {
@@ -40,26 +55,33 @@ export component BlobShell inherits Window {
 
         Rectangle {
             height: BlobTheme.header-height;
-            background: BlobTheme.canvas;
+            background: BlobTheme.surface;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
 
             HorizontalLayout {
-                padding: BlobTheme.space-4;
+                padding-left: BlobTheme.space-5;
+                padding-right: BlobTheme.space-5;
                 spacing: BlobTheme.space-4;
 
                 Text {
                     text: "THE BLOB";
                     color: BlobTheme.text;
-                    font-size: 19px;
+                    font-size: 18px;
                     font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: "alpha surface";
+                    color: BlobTheme.text-faint;
+                    font-size: 11px;
                     vertical-alignment: center;
                 }
 
                 Rectangle { horizontal-stretch: 1; background: transparent; }
 
-                BlobStatus { label: "MacBook · This Surface"; positive: true; }
-                BlobStatus { label: "Home Server · Online"; positive: true; }
+                BlobStatus { label: "Validated demo state"; positive: true; }
             }
         }
 
@@ -68,7 +90,7 @@ export component BlobShell inherits Window {
 
             Rectangle {
                 width: BlobTheme.rail-width;
-                background: BlobTheme.canvas;
+                background: BlobTheme.surface;
                 border-color: BlobTheme.border-soft;
                 border-width: 1px;
 
@@ -104,10 +126,25 @@ export component BlobShell inherits Window {
                         clicked => { root.navigate-fabric(); }
                     }
 
+                    Rectangle { height: BlobTheme.space-4; background: transparent; }
+
+                    Text {
+                        text: "ASSISTANCE";
+                        color: BlobTheme.text-faint;
+                        font-size: 10px;
+                        font-weight: 700;
+                    }
+
+                    BlobNavItem {
+                        label: "Technician";
+                        selected: root.technician-open;
+                        clicked => { root.technician-open = !root.technician-open; }
+                    }
+
                     Rectangle { vertical-stretch: 1; background: transparent; }
 
                     Text {
-                        text: root.active-page == 4 ? "INSPECTOR · READ ONLY" : "DEMO · SAFE VM";
+                        text: root.active-page == 4 ? "INSPECTOR · READ ONLY" : "ALPHA · SAFE DEMO";
                         color: BlobTheme.text-faint;
                         font-size: 10px;
                         font-weight: 700;
@@ -125,29 +162,36 @@ export component BlobShell inherits Window {
                     task-status: root.task-status;
                     binding-summary: root.binding-summary;
                     execution-output: root.execution-output;
+                    system-workspace-title: root.system-workspace-title;
+                    bluetooth-label: root.bluetooth-label;
                     open-workspace => { root.navigate-workspace(); }
                     open-inspector => { root.open-inspector(); }
                 }
 
                 if root.active-page == 1: WorkspaceView {
-                    workspace-title: root.workspace-title;
-                    situation-summary: root.situation-summary;
-                    task-status: root.task-status;
-                    binding-summary: root.binding-summary;
-                    verifier-summary: root.verifier-summary;
-                    execution-output: root.execution-output;
+                    system-workspace-title: root.system-workspace-title;
+                    system-mode: root.system-mode;
+                    bluetooth-enabled: root.bluetooth-enabled;
+                    bluetooth-label: root.bluetooth-label;
+                    pipewire-label: root.pipewire-label;
+                    printing-label: root.printing-label;
+                    proposal-pending: root.system-proposal-pending;
+                    proposal-title: root.system-proposal-title;
+                    proposal-summary: root.system-proposal-summary;
+                    proposal-diff: root.system-proposal-diff;
                     go-home => { root.navigate-now(); }
-                    open-inspector => { root.open-inspector(); }
+                    propose-bluetooth => { root.system-propose-bluetooth(); }
+                    clear-proposal => { root.system-clear-proposal(); }
                 }
 
                 if root.active-page == 2: PlaceholderView {
                     title: "History";
-                    body: "The next demo slice will turn the existing causal records into a readable timeline with a Why? path back through Event, Situation, Task, decision and result. No synthetic history is shown here.";
+                    body: "The next slice will turn the existing causal records into a readable timeline with a Why? path back through Event, Situation, Task, decision and result. No synthetic history is shown here.";
                 }
 
                 if root.active-page == 3: PlaceholderView {
                     title: "Fabric";
-                    body: "The next demo slice will project real device and capability state here. The Surface will show what each trusted node can provide without turning topology into the primary user experience.";
+                    body: "The next slice will project real device and capability state here. The Surface will show what each trusted node can provide without turning topology into the primary user experience.";
                 }
 
                 if root.active-page == 4: InspectorView {
@@ -159,7 +203,7 @@ export component BlobShell inherits Window {
                 }
             }
 
-            TechnicianPanel {
+            if root.technician-open: TechnicianPanel {
                 context-summary: root.situation-summary;
                 verifier-summary: root.verifier-summary;
                 response-title: root.technician-title;
@@ -169,6 +213,7 @@ export component BlobShell inherits Window {
                 explain => { root.technician-explain(); }
                 teach => { root.technician-teach(); }
                 prepare => { root.technician-prepare(); }
+                close => { root.technician-open = false; }
             }
         }
     }
