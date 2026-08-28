@@ -1,0 +1,257 @@
+import { BlobTheme } from "design/tokens.slint";
+import { BlobAction, BlobCard, BlobNavItem, BlobStatus } from "components/primitives.slint";
+
+export component BlobShell inherits Window {
+    in property <string> workspace-title;
+    in property <string> situation-summary;
+    in property <string> task-status;
+    in property <string> binding-summary;
+    in property <string> verifier-summary;
+    in property <string> execution-output;
+    in property <string> causal-summary;
+
+    title: "The Blob";
+    width: 1280px;
+    height: 780px;
+    background: BlobTheme.canvas;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: BlobTheme.header-height;
+            background: BlobTheme.canvas;
+            border-color: BlobTheme.border-soft;
+            border-width: 0px 0px 1px 0px;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-6;
+                padding-right: BlobTheme.space-6;
+                spacing: BlobTheme.space-4;
+
+                Text {
+                    text: "THE BLOB";
+                    color: BlobTheme.text;
+                    font-size: 19px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                BlobStatus { label: "MacBook · This Surface"; positive: true; }
+                BlobStatus { label: "Home Server · Online"; positive: true; }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+
+            Rectangle {
+                width: BlobTheme.rail-width;
+                background: BlobTheme.canvas;
+                border-color: BlobTheme.border-soft;
+                border-width: 0px 1px 0px 0px;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-4;
+                    spacing: BlobTheme.space-2;
+
+                    Text {
+                        text: "PERSONAL WORLD";
+                        color: BlobTheme.text-faint;
+                        font-size: 10px;
+                        font-weight: 700;
+                    }
+
+                    BlobNavItem { label: "Now"; selected: true; }
+                    BlobNavItem { label: "Workspaces"; }
+                    BlobNavItem { label: "History"; }
+                    BlobNavItem { label: "Fabric"; }
+
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+
+                    Text {
+                        text: "DEMO · SAFE VM";
+                        color: BlobTheme.text-faint;
+                        font-size: 10px;
+                        font-weight: 700;
+                    }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: BlobTheme.canvas;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-8;
+                    spacing: BlobTheme.space-6;
+
+                    VerticalLayout {
+                        spacing: BlobTheme.space-2;
+                        Text {
+                            text: "NOW";
+                            color: BlobTheme.text;
+                            font-size: 28px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: "Quello che conta adesso, non tutte le cose che il sistema sa.";
+                            color: BlobTheme.text-muted;
+                            font-size: 14px;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: BlobTheme.space-5;
+                        height: 220px;
+
+                        BlobCard {
+                            horizontal-stretch: 3;
+                            eyebrow: "ACTIVE WORKSPACE";
+                            title: root.workspace-title;
+                            body: root.situation-summary;
+                            meta: "Task " + root.task-status;
+                        }
+
+                        BlobCard {
+                            horizontal-stretch: 2;
+                            eyebrow: "SYSTEM";
+                            title: "Everything looks calm";
+                            body: "No persistent system change is active. The demo remains isolated.";
+                            meta: "Why? available in Inspector";
+                        }
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: BlobTheme.surface-soft;
+                        border-color: BlobTheme.border-soft;
+                        border-width: 1px;
+                        border-radius: BlobTheme.radius-xl;
+
+                        VerticalLayout {
+                            padding: BlobTheme.space-6;
+                            spacing: BlobTheme.space-4;
+
+                            HorizontalLayout {
+                                Text {
+                                    text: "CURRENT ACTIVITY";
+                                    color: BlobTheme.text-faint;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                }
+                                Rectangle { horizontal-stretch: 1; background: transparent; }
+                                BlobStatus { label: "Verified"; positive: true; }
+                            }
+
+                            Text {
+                                text: root.binding-summary;
+                                color: BlobTheme.text;
+                                font-size: 21px;
+                                font-weight: 650;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: root.execution-output;
+                                color: BlobTheme.text-muted;
+                                font-size: 14px;
+                                wrap: word-wrap;
+                            }
+
+                            Rectangle { vertical-stretch: 1; background: transparent; }
+
+                            HorizontalLayout {
+                                spacing: BlobTheme.space-3;
+                                BlobAction { width: 132px; label: "Why this?"; }
+                                BlobAction { width: 132px; label: "Inspector"; }
+                                Rectangle { horizontal-stretch: 1; background: transparent; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: BlobTheme.technician-width;
+                background: #0d1119;
+                border-color: BlobTheme.border-soft;
+                border-width: 1px 0px 0px 1px;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-5;
+                    spacing: BlobTheme.space-5;
+
+                    VerticalLayout {
+                        spacing: BlobTheme.space-1;
+                        Text {
+                            text: "TECHNICIAN";
+                            color: BlobTheme.text;
+                            font-size: 16px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: "Aware of this Workspace";
+                            color: BlobTheme.text-faint;
+                            font-size: 11px;
+                        }
+                    }
+
+                    Rectangle {
+                        background: BlobTheme.surface;
+                        border-color: BlobTheme.border-soft;
+                        border-width: 1px;
+                        border-radius: BlobTheme.radius-lg;
+                        min-height: 150px;
+
+                        VerticalLayout {
+                            padding: BlobTheme.space-4;
+                            spacing: BlobTheme.space-3;
+
+                            Text {
+                                text: "I can explain what just happened, teach the steps, or prepare the next safe experiment.";
+                                color: BlobTheme.text-muted;
+                                font-size: 14px;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: root.verifier-summary;
+                                color: BlobTheme.text-faint;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: BlobTheme.space-2;
+                        BlobAction { label: "Explain it"; }
+                        BlobAction { label: "Teach me"; }
+                        BlobAction { label: "Prepare next step"; }
+                    }
+
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+
+                    Rectangle {
+                        height: 46px;
+                        background: BlobTheme.surface;
+                        border-color: BlobTheme.border;
+                        border-width: 1px;
+                        border-radius: BlobTheme.radius-lg;
+
+                        Text {
+                            x: BlobTheme.space-4;
+                            vertical-alignment: center;
+                            text: "Ask the Technician…";
+                            color: BlobTheme.text-faint;
+                            font-size: 13px;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
