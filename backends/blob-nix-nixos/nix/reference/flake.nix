@@ -64,6 +64,9 @@
         candidate-source-quiescence = pkgs.testers.runNixOSTest {
           imports = [ ./candidate-source-quiescence-test.nix ];
         };
+        system-workspace-bluetooth-demo = pkgs.testers.runNixOSTest {
+          imports = [ ./system-workspace-bluetooth-demo-test.nix ];
+        };
       };
     };
 }
