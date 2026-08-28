@@ -2,6 +2,21 @@
 let
   sourceRoot = lib.cleanSource ../../../..;
   trustedBaseModule = pkgs.writeText "blob-system-workspace-demo-base.nix" (builtins.readFile ./base.nix);
+  expectedGeneratedModule = pkgs.writeText "blob-system-workspace-demo-generated.nix" ''
+    { pkgs, ... }:
+    {
+      networking.hostName = "blob-demo";
+      nixpkgs.hostPlatform = "x86_64-linux";
+      hardware.bluetooth.enable = true;
+      services.pipewire.enable = true;
+      services.printing.enable = false;
+    }
+  '';
+  seededBluetoothDemoSystem =
+    (import (pkgs.path + "/nixos/lib/eval-config.nix") {
+      system = "x86_64-linux";
+      modules = [ trustedBaseModule expectedGeneratedModule ];
+    }).config.system.build.toplevel;
 
   harnesses = pkgs.stdenv.mkDerivation {
     pname = "blob-system-workspace-bluetooth-demo-vm";
@@ -48,7 +63,18 @@ in
   nodes.machine = { ... }: {
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
-    system.extraDependencies = [ pkgs.path trustedBaseModule ];
+
+    # The nested validation VM is intentionally offline. Seed the exact
+    # Bluetooth demo system as a store fixture so this checkpoint proves the
+    # product composition/identity path without accidentally testing external
+    # source availability. The runtime producer still has to recreate the
+    # semantic candidate and exact output identity independently.
+    system.extraDependencies = [
+      pkgs.path
+      trustedBaseModule
+      expectedGeneratedModule
+      seededBluetoothDemoSystem
+    ];
 
     users.users.alice = {
       isNormalUser = true;
@@ -94,6 +120,7 @@ in
     NIX_STORE = "${pkgs.nix}/bin/nix-store"
     NIXPKGS = "${pkgs.path}"
     BASE = "${trustedBaseModule}"
+    EXPECTED_GENERATED = "${expectedGeneratedModule}"
     STAGING = "/var/lib/theblob/candidate-source-staging"
 
     def field(output, key):
@@ -133,6 +160,7 @@ in
     assert system_spec == "system:demo-workspace:proposal", evidence
     assert source.startswith("/nix/store/"), evidence
     assert "translation=feature:bluetooth=enabled -> hardware.bluetooth.enable" in evidence, evidence
+    machine.succeed("cmp -s " + shlex.quote(EXPECTED_GENERATED) + " " + shlex.quote(source + "/generated.nix"))
     machine.succeed("grep -Fxq '  hardware.bluetooth.enable = true;' " + shlex.quote(source + "/generated.nix"))
     machine.fail("grep -Fxq '  hardware.bluetooth.enable = false;' " + shlex.quote(source + "/generated.nix"))
     machine.succeed("test -L " + shlex.quote(source_gcroot))
