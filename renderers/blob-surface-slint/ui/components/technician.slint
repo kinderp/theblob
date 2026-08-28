@@ -11,9 +11,10 @@ export component TechnicianPanel inherits Rectangle {
     callback explain;
     callback teach;
     callback prepare;
+    callback close;
 
     width: BlobTheme.technician-width;
-    background: #0d1119;
+    background: BlobTheme.surface;
     border-color: BlobTheme.border-soft;
     border-width: 1px;
 
@@ -21,35 +22,53 @@ export component TechnicianPanel inherits Rectangle {
         padding: BlobTheme.space-5;
         spacing: BlobTheme.space-5;
 
-        VerticalLayout {
-            spacing: BlobTheme.space-2;
-            Text {
-                text: "TECHNICIAN";
-                color: BlobTheme.text;
-                font-size: 16px;
-                font-weight: 700;
-            }
-            HorizontalLayout {
+        HorizontalLayout {
+            spacing: BlobTheme.space-3;
+            VerticalLayout {
+                spacing: BlobTheme.space-2;
                 Text {
-                    text: "Aware of this Workspace";
+                    text: "TECHNICIAN";
+                    color: BlobTheme.text;
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: "Evidence-backed · no hidden authority";
                     color: BlobTheme.text-faint;
                     font-size: 11px;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                border-radius: 17px;
+                background: close-area.has-hover ? BlobTheme.surface-raised : transparent;
+                Text {
+                    text: "−";
+                    color: BlobTheme.text-muted;
+                    font-size: 18px;
+                    horizontal-alignment: center;
                     vertical-alignment: center;
                 }
-                Rectangle { horizontal-stretch: 1; background: transparent; }
-                BlobStatus { label: "Evidence-backed"; positive: true; }
+                close-area := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.close(); }
+                }
             }
         }
 
+        BlobStatus { label: "Everything is calm"; positive: true; }
+
         Text {
             text: root.context-summary;
-            color: BlobTheme.text-faint;
-            font-size: 11px;
+            color: BlobTheme.text-muted;
+            font-size: 12px;
             wrap: word-wrap;
         }
 
         Rectangle {
-            background: BlobTheme.surface;
+            background: BlobTheme.surface-soft;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
             border-radius: BlobTheme.radius-lg;
@@ -93,7 +112,7 @@ export component TechnicianPanel inherits Rectangle {
         VerticalLayout {
             spacing: BlobTheme.space-2;
             BlobAction {
-                label: "Explain it";
+                label: "Explain what happened";
                 clicked => { root.explain(); }
             }
             BlobAction {
@@ -102,6 +121,7 @@ export component TechnicianPanel inherits Rectangle {
             }
             BlobAction {
                 label: "Prepare next step";
+                primary: true;
                 clicked => { root.prepare(); }
             }
         }
