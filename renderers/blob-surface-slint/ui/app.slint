@@ -14,9 +14,18 @@ export component BlobShell inherits Window {
     in property <string> verifier-summary;
     in property <string> execution-output;
     in property <string> causal-summary;
+    in property <int> active-page: 0;
+    in property <string> technician-status: "Ready · read-only demo projection";
 
-    property <int> active-page: 0;
-    property <int> previous-page: 0;
+    callback navigate-now;
+    callback navigate-workspace;
+    callback navigate-history;
+    callback navigate-fabric;
+    callback open-inspector;
+    callback close-inspector;
+    callback technician-explain;
+    callback technician-teach;
+    callback technician-prepare;
 
     title: "The Blob";
     width: 1280px;
@@ -74,22 +83,22 @@ export component BlobShell inherits Window {
                     BlobNavItem {
                         label: "Now";
                         selected: root.active-page == 0;
-                        clicked => { root.active-page = 0; }
+                        clicked => { root.navigate-now(); }
                     }
                     BlobNavItem {
                         label: "Workspaces";
                         selected: root.active-page == 1;
-                        clicked => { root.active-page = 1; }
+                        clicked => { root.navigate-workspace(); }
                     }
                     BlobNavItem {
                         label: "History";
                         selected: root.active-page == 2;
-                        clicked => { root.active-page = 2; }
+                        clicked => { root.navigate-history(); }
                     }
                     BlobNavItem {
                         label: "Fabric";
                         selected: root.active-page == 3;
-                        clicked => { root.active-page = 3; }
+                        clicked => { root.navigate-fabric(); }
                     }
 
                     Rectangle { vertical-stretch: 1; background: transparent; }
@@ -113,11 +122,8 @@ export component BlobShell inherits Window {
                     task-status: root.task-status;
                     binding-summary: root.binding-summary;
                     execution-output: root.execution-output;
-                    open-workspace => { root.active-page = 1; }
-                    open-inspector => {
-                        root.previous-page = 0;
-                        root.active-page = 4;
-                    }
+                    open-workspace => { root.navigate-workspace(); }
+                    open-inspector => { root.open-inspector(); }
                 }
 
                 if root.active-page == 1: WorkspaceView {
@@ -127,11 +133,8 @@ export component BlobShell inherits Window {
                     binding-summary: root.binding-summary;
                     verifier-summary: root.verifier-summary;
                     execution-output: root.execution-output;
-                    go-home => { root.active-page = 0; }
-                    open-inspector => {
-                        root.previous-page = 1;
-                        root.active-page = 4;
-                    }
+                    go-home => { root.navigate-now(); }
+                    open-inspector => { root.open-inspector(); }
                 }
 
                 if root.active-page == 2: PlaceholderView {
@@ -149,13 +152,17 @@ export component BlobShell inherits Window {
                     verifier-summary: root.verifier-summary;
                     execution-output: root.execution-output;
                     causal-summary: root.causal-summary;
-                    close => { root.active-page = root.previous-page; }
+                    close => { root.close-inspector(); }
                 }
             }
 
             TechnicianPanel {
                 context-summary: root.situation-summary;
                 verifier-summary: root.verifier-summary;
+                intent-status: root.technician-status;
+                explain => { root.technician-explain(); }
+                teach => { root.technician-teach(); }
+                prepare => { root.technician-prepare(); }
             }
         }
     }

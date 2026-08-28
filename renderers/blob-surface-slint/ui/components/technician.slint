@@ -1,9 +1,10 @@
 import { BlobTheme } from "../design/tokens.slint";
-import { BlobAction } from "primitives.slint";
+import { BlobAction, BlobStatus } from "primitives.slint";
 
 export component TechnicianPanel inherits Rectangle {
     in property <string> context-summary;
     in property <string> verifier-summary;
+    in property <string> intent-status;
     callback explain;
     callback teach;
     callback prepare;
@@ -18,17 +19,22 @@ export component TechnicianPanel inherits Rectangle {
         spacing: BlobTheme.space-5;
 
         VerticalLayout {
-            spacing: BlobTheme.space-1;
+            spacing: BlobTheme.space-2;
             Text {
                 text: "TECHNICIAN";
                 color: BlobTheme.text;
                 font-size: 16px;
                 font-weight: 700;
             }
-            Text {
-                text: "Aware of this Workspace";
-                color: BlobTheme.text-faint;
-                font-size: 11px;
+            HorizontalLayout {
+                Text {
+                    text: "Aware of this Workspace";
+                    color: BlobTheme.text-faint;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                BlobStatus { label: "Read-only"; positive: true; }
             }
         }
 
@@ -37,7 +43,7 @@ export component TechnicianPanel inherits Rectangle {
             border-color: BlobTheme.border-soft;
             border-width: 1px;
             border-radius: BlobTheme.radius-lg;
-            min-height: 162px;
+            min-height: 174px;
 
             VerticalLayout {
                 padding: BlobTheme.space-4;
@@ -57,6 +63,13 @@ export component TechnicianPanel inherits Rectangle {
                     wrap: word-wrap;
                 }
             }
+        }
+
+        Text {
+            text: root.intent-status;
+            color: BlobTheme.warning;
+            font-size: 12px;
+            wrap: word-wrap;
         }
 
         VerticalLayout {

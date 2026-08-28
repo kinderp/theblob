@@ -1,6 +1,12 @@
 #![deny(unsafe_code)]
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use blob_mvp::VerticalSliceOutcome;
+use blob_surface_app::{
+    PrimarySurface, SurfaceApplication, SurfaceEffect, SurfaceIntent, TechnicianIntent,
+};
 
 slint::include_modules!();
 
@@ -62,6 +68,39 @@ impl DevelopmentSurfaceSnapshot {
     }
 }
 
+fn page_index(page: PrimarySurface) -> i32 {
+    match page {
+        PrimarySurface::Now => 0,
+        PrimarySurface::CurrentWorkspace => 1,
+        PrimarySurface::History => 2,
+        PrimarySurface::Fabric => 3,
+        PrimarySurface::Inspector => 4,
+    }
+}
+
+fn technician_status(intent: TechnicianIntent) -> &'static str {
+    match intent {
+        TechnicianIntent::ExplainCurrent => {
+            "Explain intent recorded · read-only evidence projection only"
+        }
+        TechnicianIntent::TeachCurrent => {
+            "Teach intent recorded · no system mutation or hidden execution"
+        }
+        TechnicianIntent::PrepareNextStep => {
+            "Prepare intent recorded · no backend action has been authorized or started"
+        }
+    }
+}
+
+fn apply_effect(ui: &BlobShell, effect: SurfaceEffect) {
+    match effect {
+        SurfaceEffect::PageChanged(page) => ui.set_active_page(page_index(page)),
+        SurfaceEffect::TechnicianIntentRecorded(intent) => {
+            ui.set_technician_status(technician_status(intent).into());
+        }
+    }
+}
+
 pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::PlatformError> {
     let ui = BlobShell::new()?;
     ui.set_workspace_title(snapshot.workspace_title.clone().into());
@@ -71,5 +110,114 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     ui.set_verifier_summary(snapshot.verifier_summary.clone().into());
     ui.set_execution_output(snapshot.execution_output.clone().into());
     ui.set_causal_summary(snapshot.causal_summary.clone().into());
+
+    let app = Rc::new(RefCell::new(SurfaceApplication::default()));
+    ui.set_active_page(page_index(app.borrow().current()));
+
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_navigate_now(move || {
+            let effect = app
+                .borrow_mut()
+                .apply(SurfaceIntent::Navigate(PrimarySurface::Now));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_navigate_workspace(move || {
+            let effect = app
+                .borrow_mut()
+                .apply(SurfaceIntent::Navigate(PrimarySurface::CurrentWorkspace));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_navigate_history(move || {
+            let effect = app
+                .borrow_mut()
+                .apply(SurfaceIntent::Navigate(PrimarySurface::History));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_navigate_fabric(move || {
+            let effect = app
+                .borrow_mut()
+                .apply(SurfaceIntent::Navigate(PrimarySurface::Fabric));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_open_inspector(move || {
+            let effect = app.borrow_mut().apply(SurfaceIntent::OpenInspector);
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_close_inspector(move || {
+            let effect = app.borrow_mut().apply(SurfaceIntent::CloseInspector);
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_technician_explain(move || {
+            let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
+                TechnicianIntent::ExplainCurrent,
+            ));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_technician_teach(move || {
+            let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
+                TechnicianIntent::TeachCurrent,
+            ));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let app = Rc::clone(&app);
+        ui.on_technician_prepare(move || {
+            let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
+                TechnicianIntent::PrepareNextStep,
+            ));
+            if let Some(ui) = weak.upgrade() {
+                apply_effect(&ui, effect);
+            }
+        });
+    }
+
     ui.run()
 }
