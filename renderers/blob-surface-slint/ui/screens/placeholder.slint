@@ -1,0 +1,45 @@
+import { BlobTheme } from "../design/tokens.slint";
+import { BlobStatus } from "../components/primitives.slint";
+
+export component PlaceholderView inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+
+    background: BlobTheme.canvas;
+
+    VerticalLayout {
+        padding: BlobTheme.space-8;
+        spacing: BlobTheme.space-6;
+
+        HorizontalLayout {
+            Text {
+                text: root.title;
+                color: BlobTheme.text;
+                font-size: 27px;
+                font-weight: 700;
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            BlobStatus { label: "Next demo slice"; }
+        }
+
+        Rectangle {
+            height: 180px;
+            background: BlobTheme.surface-soft;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-xl;
+
+            Text {
+                x: BlobTheme.space-6;
+                y: BlobTheme.space-6;
+                width: parent.width - BlobTheme.space-10;
+                text: root.body;
+                color: BlobTheme.text-muted;
+                font-size: 15px;
+                wrap: word-wrap;
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; background: transparent; }
+    }
+}

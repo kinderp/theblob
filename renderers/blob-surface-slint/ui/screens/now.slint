@@ -1,0 +1,111 @@
+import { BlobTheme } from "../design/tokens.slint";
+import { BlobAction, BlobCard, BlobStatus } from "../components/primitives.slint";
+
+export component NowView inherits Rectangle {
+    in property <string> workspace-title;
+    in property <string> situation-summary;
+    in property <string> task-status;
+    in property <string> binding-summary;
+    in property <string> execution-output;
+    callback open-workspace;
+    callback open-inspector;
+
+    background: BlobTheme.canvas;
+
+    VerticalLayout {
+        padding: BlobTheme.space-8;
+        spacing: BlobTheme.space-6;
+
+        VerticalLayout {
+            spacing: BlobTheme.space-2;
+            Text {
+                text: "NOW";
+                color: BlobTheme.text;
+                font-size: 28px;
+                font-weight: 700;
+            }
+            Text {
+                text: "Quello che conta adesso, non tutte le cose che il sistema sa.";
+                color: BlobTheme.text-muted;
+                font-size: 14px;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-5;
+            height: 220px;
+
+            BlobCard {
+                horizontal-stretch: 3;
+                eyebrow: "ACTIVE WORKSPACE";
+                title: root.workspace-title;
+                body: root.situation-summary;
+                meta: "Task " + root.task-status;
+            }
+
+            BlobCard {
+                horizontal-stretch: 2;
+                eyebrow: "SYSTEM";
+                title: "Everything looks calm";
+                body: "No persistent system change is active. The demo remains isolated.";
+                meta: "Why? available in Inspector";
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: BlobTheme.surface-soft;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-xl;
+
+            VerticalLayout {
+                padding: BlobTheme.space-6;
+                spacing: BlobTheme.space-4;
+
+                HorizontalLayout {
+                    Text {
+                        text: "CURRENT ACTIVITY";
+                        color: BlobTheme.text-faint;
+                        font-size: 11px;
+                        font-weight: 700;
+                    }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    BlobStatus { label: "Verified"; positive: true; }
+                }
+
+                Text {
+                    text: root.binding-summary;
+                    color: BlobTheme.text;
+                    font-size: 21px;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: root.execution-output;
+                    color: BlobTheme.text-muted;
+                    font-size: 14px;
+                    wrap: word-wrap;
+                }
+
+                Rectangle { vertical-stretch: 1; background: transparent; }
+
+                HorizontalLayout {
+                    spacing: BlobTheme.space-3;
+                    BlobAction {
+                        width: 132px;
+                        label: "Workspace";
+                        clicked => { root.open-workspace(); }
+                    }
+                    BlobAction {
+                        width: 132px;
+                        label: "Why this?";
+                        clicked => { root.open-inspector(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,114 @@
+import { BlobTheme } from "../design/tokens.slint";
+import { BlobAction, BlobCard, BlobStatus } from "../components/primitives.slint";
+
+export component InspectorView inherits Rectangle {
+    in property <string> binding-summary;
+    in property <string> verifier-summary;
+    in property <string> execution-output;
+    in property <string> causal-summary;
+    callback close;
+
+    background: BlobTheme.canvas;
+
+    VerticalLayout {
+        padding: BlobTheme.space-8;
+        spacing: BlobTheme.space-6;
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-4;
+            VerticalLayout {
+                spacing: BlobTheme.space-2;
+                Text {
+                    text: "INSPECTOR";
+                    color: BlobTheme.text;
+                    font-size: 27px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: "Technical depth without making it the default interface.";
+                    color: BlobTheme.text-muted;
+                    font-size: 14px;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            BlobStatus { label: "Read-only"; positive: true; }
+        }
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-5;
+            height: 210px;
+
+            BlobCard {
+                horizontal-stretch: 1;
+                eyebrow: "BINDING";
+                title: root.binding-summary;
+                body: "Selected implementation and node for the capability requested by the Workspace.";
+                meta: "The resolver does not authorize itself.";
+            }
+
+            BlobCard {
+                horizontal-stretch: 1;
+                eyebrow: "INDEPENDENT VERIFIER";
+                title: "Verification evidence";
+                body: root.verifier-summary;
+                meta: "Failure here blocks execution.";
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: BlobTheme.surface-soft;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-xl;
+
+            HorizontalLayout {
+                padding: BlobTheme.space-5;
+                spacing: BlobTheme.space-6;
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: BlobTheme.space-3;
+                    Text {
+                        text: "EXECUTION";
+                        color: BlobTheme.text-faint;
+                        font-size: 11px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.execution-output;
+                        color: BlobTheme.text;
+                        font-size: 14px;
+                        wrap: word-wrap;
+                    }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: BlobTheme.space-3;
+                    Text {
+                        text: "CAUSAL TRACE";
+                        color: BlobTheme.text-faint;
+                        font-size: 11px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.causal-summary;
+                        color: BlobTheme.text-muted;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            BlobAction {
+                width: 120px;
+                label: "Back";
+                clicked => { root.close(); }
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+        }
+    }
+}

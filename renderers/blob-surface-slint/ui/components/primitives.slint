@@ -1,0 +1,117 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+export component BlobCard inherits Rectangle {
+    in property <string> eyebrow: "";
+    in property <string> title: "";
+    in property <string> body: "";
+    in property <string> meta: "";
+
+    background: BlobTheme.surface;
+    border-color: BlobTheme.border-soft;
+    border-width: 1px;
+    border-radius: BlobTheme.radius-lg;
+
+    VerticalLayout {
+        padding: BlobTheme.space-5;
+        spacing: BlobTheme.space-3;
+
+        Text {
+            text: root.eyebrow;
+            color: BlobTheme.text-faint;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: root.title;
+            color: BlobTheme.text;
+            font-size: 20px;
+            font-weight: 700;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.body;
+            color: BlobTheme.text-muted;
+            font-size: 14px;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.meta;
+            color: BlobTheme.text-faint;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component BlobNavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    callback clicked;
+
+    height: 38px;
+    border-radius: BlobTheme.radius-md;
+    background: selected ? BlobTheme.accent-soft : nav-area.has-hover ? BlobTheme.surface-raised : transparent;
+
+    Text {
+        x: BlobTheme.space-4;
+        vertical-alignment: center;
+        text: root.label;
+        color: selected ? BlobTheme.text : BlobTheme.text-muted;
+        font-size: 14px;
+        font-weight: selected ? 700 : 500;
+    }
+
+    nav-area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component BlobStatus inherits Rectangle {
+    in property <string> label;
+    in property <bool> positive: false;
+
+    min-width: 82px;
+    height: 28px;
+    border-radius: 14px;
+    background: positive ? #16271f : BlobTheme.surface-raised;
+    border-color: positive ? #2d5940 : BlobTheme.border-soft;
+    border-width: 1px;
+
+    Text {
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.label;
+        color: positive ? BlobTheme.success : BlobTheme.text-muted;
+        font-size: 12px;
+        font-weight: 600;
+    }
+}
+
+export component BlobAction inherits Rectangle {
+    in property <string> label;
+    callback clicked;
+
+    height: 38px;
+    border-radius: BlobTheme.radius-md;
+    background: action-area.has-hover ? #302b58 : BlobTheme.accent-soft;
+    border-color: #49407d;
+    border-width: 1px;
+
+    Text {
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.label;
+        color: BlobTheme.text;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    action-area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

@@ -1,0 +1,96 @@
+import { BlobTheme } from "../design/tokens.slint";
+import { BlobAction } from "primitives.slint";
+
+export component TechnicianPanel inherits Rectangle {
+    in property <string> context-summary;
+    in property <string> verifier-summary;
+    callback explain;
+    callback teach;
+    callback prepare;
+
+    width: BlobTheme.technician-width;
+    background: #0d1119;
+    border-color: BlobTheme.border-soft;
+    border-width: 1px;
+
+    VerticalLayout {
+        padding: BlobTheme.space-5;
+        spacing: BlobTheme.space-5;
+
+        VerticalLayout {
+            spacing: BlobTheme.space-1;
+            Text {
+                text: "TECHNICIAN";
+                color: BlobTheme.text;
+                font-size: 16px;
+                font-weight: 700;
+            }
+            Text {
+                text: "Aware of this Workspace";
+                color: BlobTheme.text-faint;
+                font-size: 11px;
+            }
+        }
+
+        Rectangle {
+            background: BlobTheme.surface;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-lg;
+            min-height: 162px;
+
+            VerticalLayout {
+                padding: BlobTheme.space-4;
+                spacing: BlobTheme.space-3;
+
+                Text {
+                    text: root.context-summary;
+                    color: BlobTheme.text-muted;
+                    font-size: 14px;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: root.verifier-summary;
+                    color: BlobTheme.text-faint;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: BlobTheme.space-2;
+            BlobAction {
+                label: "Explain it";
+                clicked => { root.explain(); }
+            }
+            BlobAction {
+                label: "Teach me";
+                clicked => { root.teach(); }
+            }
+            BlobAction {
+                label: "Prepare next step";
+                clicked => { root.prepare(); }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; background: transparent; }
+
+        Rectangle {
+            height: 46px;
+            background: BlobTheme.surface;
+            border-color: BlobTheme.border;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-lg;
+
+            Text {
+                x: BlobTheme.space-4;
+                vertical-alignment: center;
+                text: "Ask the Technician…";
+                color: BlobTheme.text-faint;
+                font-size: 13px;
+            }
+        }
+    }
+}

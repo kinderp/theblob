@@ -1,0 +1,162 @@
+import { BlobTheme } from "design/tokens.slint";
+import { BlobNavItem, BlobStatus } from "components/primitives.slint";
+import { TechnicianPanel } from "components/technician.slint";
+import { InspectorView } from "screens/inspector.slint";
+import { NowView } from "screens/now.slint";
+import { PlaceholderView } from "screens/placeholder.slint";
+import { WorkspaceView } from "screens/workspace.slint";
+
+export component BlobShell inherits Window {
+    in property <string> workspace-title;
+    in property <string> situation-summary;
+    in property <string> task-status;
+    in property <string> binding-summary;
+    in property <string> verifier-summary;
+    in property <string> execution-output;
+    in property <string> causal-summary;
+
+    property <int> active-page: 0;
+    property <int> previous-page: 0;
+
+    title: "The Blob";
+    width: 1280px;
+    height: 780px;
+    background: BlobTheme.canvas;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: BlobTheme.header-height;
+            background: BlobTheme.canvas;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding: BlobTheme.space-4;
+                spacing: BlobTheme.space-4;
+
+                Text {
+                    text: "THE BLOB";
+                    color: BlobTheme.text;
+                    font-size: 19px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                BlobStatus { label: "MacBook · This Surface"; positive: true; }
+                BlobStatus { label: "Home Server · Online"; positive: true; }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+
+            Rectangle {
+                width: BlobTheme.rail-width;
+                background: BlobTheme.canvas;
+                border-color: BlobTheme.border-soft;
+                border-width: 1px;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-4;
+                    spacing: BlobTheme.space-2;
+
+                    Text {
+                        text: "PERSONAL WORLD";
+                        color: BlobTheme.text-faint;
+                        font-size: 10px;
+                        font-weight: 700;
+                    }
+
+                    BlobNavItem {
+                        label: "Now";
+                        selected: root.active-page == 0;
+                        clicked => { root.active-page = 0; }
+                    }
+                    BlobNavItem {
+                        label: "Workspaces";
+                        selected: root.active-page == 1;
+                        clicked => { root.active-page = 1; }
+                    }
+                    BlobNavItem {
+                        label: "History";
+                        selected: root.active-page == 2;
+                        clicked => { root.active-page = 2; }
+                    }
+                    BlobNavItem {
+                        label: "Fabric";
+                        selected: root.active-page == 3;
+                        clicked => { root.active-page = 3; }
+                    }
+
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+
+                    Text {
+                        text: root.active-page == 4 ? "INSPECTOR · READ ONLY" : "DEMO · SAFE VM";
+                        color: BlobTheme.text-faint;
+                        font-size: 10px;
+                        font-weight: 700;
+                    }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: BlobTheme.canvas;
+
+                if root.active-page == 0: NowView {
+                    workspace-title: root.workspace-title;
+                    situation-summary: root.situation-summary;
+                    task-status: root.task-status;
+                    binding-summary: root.binding-summary;
+                    execution-output: root.execution-output;
+                    open-workspace => { root.active-page = 1; }
+                    open-inspector => {
+                        root.previous-page = 0;
+                        root.active-page = 4;
+                    }
+                }
+
+                if root.active-page == 1: WorkspaceView {
+                    workspace-title: root.workspace-title;
+                    situation-summary: root.situation-summary;
+                    task-status: root.task-status;
+                    binding-summary: root.binding-summary;
+                    verifier-summary: root.verifier-summary;
+                    execution-output: root.execution-output;
+                    go-home => { root.active-page = 0; }
+                    open-inspector => {
+                        root.previous-page = 1;
+                        root.active-page = 4;
+                    }
+                }
+
+                if root.active-page == 2: PlaceholderView {
+                    title: "History";
+                    body: "The next demo slice will turn the existing causal records into a readable timeline with a Why? path back through Event, Situation, Task, decision and result. No synthetic history is shown here.";
+                }
+
+                if root.active-page == 3: PlaceholderView {
+                    title: "Fabric";
+                    body: "The next demo slice will project real device and capability state here. The Surface will show what each trusted node can provide without turning topology into the primary user experience.";
+                }
+
+                if root.active-page == 4: InspectorView {
+                    binding-summary: root.binding-summary;
+                    verifier-summary: root.verifier-summary;
+                    execution-output: root.execution-output;
+                    causal-summary: root.causal-summary;
+                    close => { root.active-page = root.previous-page; }
+                }
+            }
+
+            TechnicianPanel {
+                context-summary: root.situation-summary;
+                verifier-summary: root.verifier-summary;
+            }
+        }
+    }
+}

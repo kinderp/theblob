@@ -1,0 +1,102 @@
+import { BlobTheme } from "../design/tokens.slint";
+import { BlobAction, BlobCard, BlobStatus } from "../components/primitives.slint";
+
+export component WorkspaceView inherits Rectangle {
+    in property <string> workspace-title;
+    in property <string> situation-summary;
+    in property <string> task-status;
+    in property <string> binding-summary;
+    in property <string> verifier-summary;
+    in property <string> execution-output;
+    callback go-home;
+    callback open-inspector;
+
+    background: BlobTheme.canvas;
+
+    VerticalLayout {
+        padding: BlobTheme.space-8;
+        spacing: BlobTheme.space-6;
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-4;
+            VerticalLayout {
+                spacing: BlobTheme.space-2;
+                Text {
+                    text: root.workspace-title;
+                    color: BlobTheme.text;
+                    font-size: 27px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: "Development Workspace";
+                    color: BlobTheme.text-muted;
+                    font-size: 14px;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            BlobStatus { label: root.task-status; positive: true; }
+        }
+
+        Rectangle {
+            height: 128px;
+            background: BlobTheme.surface-soft;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-xl;
+
+            VerticalLayout {
+                padding: BlobTheme.space-5;
+                spacing: BlobTheme.space-3;
+                Text {
+                    text: "FOCUS";
+                    color: BlobTheme.text-faint;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: root.situation-summary;
+                    color: BlobTheme.text;
+                    font-size: 18px;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-5;
+            vertical-stretch: 1;
+
+            BlobCard {
+                horizontal-stretch: 1;
+                eyebrow: "CAPABILITY IN USE";
+                title: root.binding-summary;
+                body: "The Workspace asked for a capability; the implementation remains replaceable.";
+                meta: "Open Why? to inspect resolver and verifier evidence.";
+            }
+
+            BlobCard {
+                horizontal-stretch: 1;
+                eyebrow: "LATEST RESULT";
+                title: root.execution-output;
+                body: root.verifier-summary;
+                meta: "State comes from the real MVP vertical slice.";
+            }
+        }
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-3;
+            BlobAction {
+                width: 120px;
+                label: "Now";
+                clicked => { root.go-home(); }
+            }
+            BlobAction {
+                width: 132px;
+                label: "Inspector";
+                clicked => { root.open-inspector(); }
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+        }
+    }
+}
