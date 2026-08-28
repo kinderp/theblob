@@ -1,5 +1,10 @@
 import { BlobTheme } from "design/tokens.slint";
-import { BlobAction, BlobCard, BlobNavItem, BlobStatus } from "components/primitives.slint";
+import { BlobNavItem, BlobStatus } from "components/primitives.slint";
+import { TechnicianPanel } from "components/technician.slint";
+import { InspectorView } from "screens/inspector.slint";
+import { NowView } from "screens/now.slint";
+import { PlaceholderView } from "screens/placeholder.slint";
+import { WorkspaceView } from "screens/workspace.slint";
 
 export component BlobShell inherits Window {
     in property <string> workspace-title;
@@ -9,6 +14,9 @@ export component BlobShell inherits Window {
     in property <string> verifier-summary;
     in property <string> execution-output;
     in property <string> causal-summary;
+
+    property <int> active-page: 0;
+    property <int> previous-page: 0;
 
     title: "The Blob";
     width: 1280px;
@@ -63,15 +71,31 @@ export component BlobShell inherits Window {
                         font-weight: 700;
                     }
 
-                    BlobNavItem { label: "Now"; selected: true; }
-                    BlobNavItem { label: "Workspaces"; }
-                    BlobNavItem { label: "History"; }
-                    BlobNavItem { label: "Fabric"; }
+                    BlobNavItem {
+                        label: "Now";
+                        selected: root.active-page == 0;
+                        clicked => { root.active-page = 0; }
+                    }
+                    BlobNavItem {
+                        label: "Workspaces";
+                        selected: root.active-page == 1;
+                        clicked => { root.active-page = 1; }
+                    }
+                    BlobNavItem {
+                        label: "History";
+                        selected: root.active-page == 2;
+                        clicked => { root.active-page = 2; }
+                    }
+                    BlobNavItem {
+                        label: "Fabric";
+                        selected: root.active-page == 3;
+                        clicked => { root.active-page = 3; }
+                    }
 
                     Rectangle { vertical-stretch: 1; background: transparent; }
 
                     Text {
-                        text: "DEMO · SAFE VM";
+                        text: root.active-page == 4 ? "INSPECTOR · READ ONLY" : "DEMO · SAFE VM";
                         color: BlobTheme.text-faint;
                         font-size: 10px;
                         font-weight: 700;
@@ -83,173 +107,55 @@ export component BlobShell inherits Window {
                 horizontal-stretch: 1;
                 background: BlobTheme.canvas;
 
-                VerticalLayout {
-                    padding: BlobTheme.space-8;
-                    spacing: BlobTheme.space-6;
-
-                    VerticalLayout {
-                        spacing: BlobTheme.space-2;
-                        Text {
-                            text: "NOW";
-                            color: BlobTheme.text;
-                            font-size: 28px;
-                            font-weight: 700;
-                        }
-                        Text {
-                            text: "Quello che conta adesso, non tutte le cose che il sistema sa.";
-                            color: BlobTheme.text-muted;
-                            font-size: 14px;
-                        }
+                if root.active-page == 0: NowView {
+                    workspace-title: root.workspace-title;
+                    situation-summary: root.situation-summary;
+                    task-status: root.task-status;
+                    binding-summary: root.binding-summary;
+                    execution-output: root.execution-output;
+                    open-workspace => { root.active-page = 1; }
+                    open-inspector => {
+                        root.previous-page = 0;
+                        root.active-page = 4;
                     }
+                }
 
-                    HorizontalLayout {
-                        spacing: BlobTheme.space-5;
-                        height: 220px;
-
-                        BlobCard {
-                            horizontal-stretch: 3;
-                            eyebrow: "ACTIVE WORKSPACE";
-                            title: root.workspace-title;
-                            body: root.situation-summary;
-                            meta: "Task " + root.task-status;
-                        }
-
-                        BlobCard {
-                            horizontal-stretch: 2;
-                            eyebrow: "SYSTEM";
-                            title: "Everything looks calm";
-                            body: "No persistent system change is active. The demo remains isolated.";
-                            meta: "Why? available in Inspector";
-                        }
+                if root.active-page == 1: WorkspaceView {
+                    workspace-title: root.workspace-title;
+                    situation-summary: root.situation-summary;
+                    task-status: root.task-status;
+                    binding-summary: root.binding-summary;
+                    verifier-summary: root.verifier-summary;
+                    execution-output: root.execution-output;
+                    go-home => { root.active-page = 0; }
+                    open-inspector => {
+                        root.previous-page = 1;
+                        root.active-page = 4;
                     }
+                }
 
-                    Rectangle {
-                        vertical-stretch: 1;
-                        background: BlobTheme.surface-soft;
-                        border-color: BlobTheme.border-soft;
-                        border-width: 1px;
-                        border-radius: BlobTheme.radius-xl;
+                if root.active-page == 2: PlaceholderView {
+                    title: "History";
+                    body: "The next demo slice will turn the existing causal records into a readable timeline with a Why? path back through Event, Situation, Task, decision and result. No synthetic history is shown here.";
+                }
 
-                        VerticalLayout {
-                            padding: BlobTheme.space-6;
-                            spacing: BlobTheme.space-4;
+                if root.active-page == 3: PlaceholderView {
+                    title: "Fabric";
+                    body: "The next demo slice will project real device and capability state here. The Surface will show what each trusted node can provide without turning topology into the primary user experience.";
+                }
 
-                            HorizontalLayout {
-                                Text {
-                                    text: "CURRENT ACTIVITY";
-                                    color: BlobTheme.text-faint;
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                }
-                                Rectangle { horizontal-stretch: 1; background: transparent; }
-                                BlobStatus { label: "Verified"; positive: true; }
-                            }
-
-                            Text {
-                                text: root.binding-summary;
-                                color: BlobTheme.text;
-                                font-size: 21px;
-                                font-weight: 600;
-                                wrap: word-wrap;
-                            }
-
-                            Text {
-                                text: root.execution-output;
-                                color: BlobTheme.text-muted;
-                                font-size: 14px;
-                                wrap: word-wrap;
-                            }
-
-                            Rectangle { vertical-stretch: 1; background: transparent; }
-
-                            HorizontalLayout {
-                                spacing: BlobTheme.space-3;
-                                BlobAction { width: 132px; label: "Why this?"; }
-                                BlobAction { width: 132px; label: "Inspector"; }
-                                Rectangle { horizontal-stretch: 1; background: transparent; }
-                            }
-                        }
-                    }
+                if root.active-page == 4: InspectorView {
+                    binding-summary: root.binding-summary;
+                    verifier-summary: root.verifier-summary;
+                    execution-output: root.execution-output;
+                    causal-summary: root.causal-summary;
+                    close => { root.active-page = root.previous-page; }
                 }
             }
 
-            Rectangle {
-                width: BlobTheme.technician-width;
-                background: #0d1119;
-                border-color: BlobTheme.border-soft;
-                border-width: 1px;
-
-                VerticalLayout {
-                    padding: BlobTheme.space-5;
-                    spacing: BlobTheme.space-5;
-
-                    VerticalLayout {
-                        spacing: BlobTheme.space-1;
-                        Text {
-                            text: "TECHNICIAN";
-                            color: BlobTheme.text;
-                            font-size: 16px;
-                            font-weight: 700;
-                        }
-                        Text {
-                            text: "Aware of this Workspace";
-                            color: BlobTheme.text-faint;
-                            font-size: 11px;
-                        }
-                    }
-
-                    Rectangle {
-                        background: BlobTheme.surface;
-                        border-color: BlobTheme.border-soft;
-                        border-width: 1px;
-                        border-radius: BlobTheme.radius-lg;
-                        min-height: 150px;
-
-                        VerticalLayout {
-                            padding: BlobTheme.space-4;
-                            spacing: BlobTheme.space-3;
-
-                            Text {
-                                text: "I can explain what just happened, teach the steps, or prepare the next safe experiment.";
-                                color: BlobTheme.text-muted;
-                                font-size: 14px;
-                                wrap: word-wrap;
-                            }
-
-                            Text {
-                                text: root.verifier-summary;
-                                color: BlobTheme.text-faint;
-                                font-size: 12px;
-                                wrap: word-wrap;
-                            }
-                        }
-                    }
-
-                    VerticalLayout {
-                        spacing: BlobTheme.space-2;
-                        BlobAction { label: "Explain it"; }
-                        BlobAction { label: "Teach me"; }
-                        BlobAction { label: "Prepare next step"; }
-                    }
-
-                    Rectangle { vertical-stretch: 1; background: transparent; }
-
-                    Rectangle {
-                        height: 46px;
-                        background: BlobTheme.surface;
-                        border-color: BlobTheme.border;
-                        border-width: 1px;
-                        border-radius: BlobTheme.radius-lg;
-
-                        Text {
-                            x: BlobTheme.space-4;
-                            vertical-alignment: center;
-                            text: "Ask the Technician…";
-                            color: BlobTheme.text-faint;
-                            font-size: 13px;
-                        }
-                    }
-                }
+            TechnicianPanel {
+                context-summary: root.situation-summary;
+                verifier-summary: root.verifier-summary;
             }
         }
     }
