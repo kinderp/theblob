@@ -22,11 +22,10 @@ export component BlobShell inherits Window {
             height: BlobTheme.header-height;
             background: BlobTheme.canvas;
             border-color: BlobTheme.border-soft;
-            border-width: 0px 0px 1px 0px;
+            border-width: 1px;
 
             HorizontalLayout {
-                padding-left: BlobTheme.space-6;
-                padding-right: BlobTheme.space-6;
+                padding: BlobTheme.space-4;
                 spacing: BlobTheme.space-4;
 
                 Text {
@@ -51,7 +50,7 @@ export component BlobShell inherits Window {
                 width: BlobTheme.rail-width;
                 background: BlobTheme.canvas;
                 border-color: BlobTheme.border-soft;
-                border-width: 0px 1px 0px 0px;
+                border-width: 1px;
 
                 VerticalLayout {
                     padding: BlobTheme.space-4;
@@ -150,7 +149,7 @@ export component BlobShell inherits Window {
                                 text: root.binding-summary;
                                 color: BlobTheme.text;
                                 font-size: 21px;
-                                font-weight: 650;
+                                font-weight: 600;
                                 wrap: word-wrap;
                             }
 
@@ -178,7 +177,7 @@ export component BlobShell inherits Window {
                 width: BlobTheme.technician-width;
                 background: #0d1119;
                 border-color: BlobTheme.border-soft;
-                border-width: 1px 0px 0px 1px;
+                border-width: 1px;
 
                 VerticalLayout {
                     padding: BlobTheme.space-5;
