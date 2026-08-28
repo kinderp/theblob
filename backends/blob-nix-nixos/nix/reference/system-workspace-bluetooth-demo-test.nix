@@ -149,7 +149,7 @@ in
     )
     request_id = field(queued, "request-id")
     operation = field(queued, "operation")
-    assert request_id.startswith("request:materialize-"), queued
+    assert request_id.startswith("begin-request:"), queued
     assert operation.startswith("op:materialize-"), queued
 
     worked = machine.succeed(
