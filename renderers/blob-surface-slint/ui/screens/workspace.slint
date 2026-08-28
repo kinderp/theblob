@@ -1,102 +1,211 @@
 import { BlobTheme } from "../design/tokens.slint";
-import { BlobAction, BlobCard, BlobStatus } from "../components/primitives.slint";
+import { BlobAction, BlobStatus } from "../components/primitives.slint";
 
 export component WorkspaceView inherits Rectangle {
-    in property <string> workspace-title;
-    in property <string> situation-summary;
-    in property <string> task-status;
-    in property <string> binding-summary;
-    in property <string> verifier-summary;
-    in property <string> execution-output;
+    in property <string> system-workspace-title;
+    in property <string> system-mode;
+    in property <bool> bluetooth-enabled: false;
+    in property <string> bluetooth-label;
+    in property <string> pipewire-label;
+    in property <string> printing-label;
+    in property <bool> proposal-pending: false;
+    in property <string> proposal-title;
+    in property <string> proposal-summary;
+    in property <string> proposal-diff;
     callback go-home;
-    callback open-inspector;
+    callback propose-bluetooth;
+    callback clear-proposal;
 
     background: BlobTheme.canvas;
 
     VerticalLayout {
         padding: BlobTheme.space-8;
-        spacing: BlobTheme.space-6;
+        spacing: BlobTheme.space-5;
 
         HorizontalLayout {
             spacing: BlobTheme.space-4;
             VerticalLayout {
                 spacing: BlobTheme.space-2;
                 Text {
-                    text: root.workspace-title;
+                    text: root.system-workspace-title;
                     color: BlobTheme.text;
                     font-size: 27px;
                     font-weight: 700;
                 }
                 Text {
-                    text: "Development Workspace";
+                    text: "Personal Computer · " + root.system-mode;
                     color: BlobTheme.text-muted;
                     font-size: 14px;
                 }
             }
             Rectangle { horizontal-stretch: 1; background: transparent; }
-            BlobStatus { label: root.task-status; positive: true; }
+            BlobStatus { label: "Semantic state valid"; positive: true; }
         }
 
         Rectangle {
-            height: 128px;
+            height: 96px;
             background: BlobTheme.surface-soft;
             border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-lg;
+
+            VerticalLayout {
+                padding: BlobTheme.space-5;
+                spacing: BlobTheme.space-2;
+                Text { text: "SYSTEM WORKSPACE"; color: BlobTheme.text-faint; font-size: 10px; font-weight: 700; }
+                Text {
+                    text: "Change the desired system semantically. The renderer never emits Nix or performs privileged activation.";
+                    color: BlobTheme.text-muted;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        Text { text: "CONNECTIVITY"; color: BlobTheme.text-faint; font-size: 10px; font-weight: 700; }
+
+        HorizontalLayout {
+            spacing: BlobTheme.space-5;
+            height: 150px;
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: BlobTheme.surface;
+                border-color: root.proposal-pending ? #cfc9ff : BlobTheme.border-soft;
+                border-width: 1px;
+                border-radius: BlobTheme.radius-xl;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-5;
+                    spacing: BlobTheme.space-3;
+                    HorizontalLayout {
+                        VerticalLayout {
+                            spacing: BlobTheme.space-2;
+                            Text { text: "Bluetooth"; color: BlobTheme.text; font-size: 18px; font-weight: 700; }
+                            Text { text: root.bluetooth-label; color: BlobTheme.text-muted; font-size: 12px; }
+                        }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        switch-track := Rectangle {
+                            width: 52px;
+                            height: 30px;
+                            border-radius: 15px;
+                            background: root.bluetooth-enabled ? BlobTheme.success : (root.proposal-pending ? BlobTheme.accent-soft : BlobTheme.surface-raised);
+                            border-color: root.proposal-pending ? BlobTheme.accent : BlobTheme.border;
+                            border-width: 1px;
+                            Rectangle {
+                                width: 22px;
+                                height: 22px;
+                                x: root.bluetooth-enabled ? 26px : 3px;
+                                y: 3px;
+                                border-radius: 11px;
+                                background: root.bluetooth-enabled ? #ffffff : BlobTheme.text-faint;
+                            }
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if (!root.bluetooth-enabled && !root.proposal-pending) {
+                                        root.propose-bluetooth();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    Text {
+                        text: root.proposal-pending ? "Requested: OFF → ON · not applied" : "Click the switch to create a proposal";
+                        color: root.proposal-pending ? BlobTheme.accent : BlobTheme.text-faint;
+                        font-size: 11px;
+                    }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: BlobTheme.surface;
+                border-color: BlobTheme.border-soft;
+                border-width: 1px;
+                border-radius: BlobTheme.radius-xl;
+                VerticalLayout {
+                    padding: BlobTheme.space-5;
+                    spacing: BlobTheme.space-3;
+                    Text { text: "Audio"; color: BlobTheme.text; font-size: 18px; font-weight: 700; }
+                    Text { text: root.pipewire-label; color: BlobTheme.text-muted; font-size: 12px; }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    BlobStatus { label: "Configured"; positive: true; }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: BlobTheme.surface;
+                border-color: BlobTheme.border-soft;
+                border-width: 1px;
+                border-radius: BlobTheme.radius-xl;
+                VerticalLayout {
+                    padding: BlobTheme.space-5;
+                    spacing: BlobTheme.space-3;
+                    Text { text: "Printing"; color: BlobTheme.text; font-size: 18px; font-weight: 700; }
+                    Text { text: root.printing-label; color: BlobTheme.text-muted; font-size: 12px; }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    Text { text: "No change requested"; color: BlobTheme.text-faint; font-size: 11px; }
+                }
+            }
+        }
+
+        if root.proposal-pending: Rectangle {
+            height: 190px;
+            background: #f7f5ff;
+            border-color: #d9d3ff;
             border-width: 1px;
             border-radius: BlobTheme.radius-xl;
 
             VerticalLayout {
                 padding: BlobTheme.space-5;
                 spacing: BlobTheme.space-3;
+                HorizontalLayout {
+                    VerticalLayout {
+                        spacing: BlobTheme.space-2;
+                        Text { text: "PROPOSAL READY"; color: BlobTheme.accent; font-size: 10px; font-weight: 700; }
+                        Text { text: root.proposal-title; color: BlobTheme.text; font-size: 18px; font-weight: 700; }
+                    }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    BlobStatus { label: "Not activated"; positive: false; }
+                }
+                Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: 13px; wrap: word-wrap; }
+                Text { text: root.proposal-diff; color: BlobTheme.text; font-size: 12px; font-weight: 600; wrap: word-wrap; }
                 Text {
-                    text: "FOCUS";
+                    text: "Next architectural boundary: deterministic backend translation → candidate materialization → verification. This UI stops before authority.";
                     color: BlobTheme.text-faint;
                     font-size: 11px;
-                    font-weight: 700;
-                }
-                Text {
-                    text: root.situation-summary;
-                    color: BlobTheme.text;
-                    font-size: 18px;
-                    font-weight: 600;
                     wrap: word-wrap;
                 }
+                Rectangle { vertical-stretch: 1; background: transparent; }
+                HorizontalLayout {
+                    BlobAction {
+                        width: 126px;
+                        label: "Dismiss";
+                        clicked => { root.clear-proposal(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                }
             }
         }
 
-        HorizontalLayout {
-            spacing: BlobTheme.space-5;
-            vertical-stretch: 1;
-
-            BlobCard {
-                horizontal-stretch: 1;
-                eyebrow: "CAPABILITY IN USE";
-                title: root.binding-summary;
-                body: "The Workspace asked for a capability; the implementation remains replaceable.";
-                meta: "Open Why? to inspect resolver and verifier evidence.";
-            }
-
-            BlobCard {
-                horizontal-stretch: 1;
-                eyebrow: "LATEST RESULT";
-                title: root.execution-output;
-                body: root.verifier-summary;
-                meta: "State comes from the real MVP vertical slice.";
-            }
-        }
+        Rectangle { vertical-stretch: 1; background: transparent; }
 
         HorizontalLayout {
-            spacing: BlobTheme.space-3;
             BlobAction {
-                width: 120px;
-                label: "Now";
+                width: 112px;
+                label: "Back to Now";
                 clicked => { root.go-home(); }
             }
-            BlobAction {
-                width: 132px;
-                label: "Inspector";
-                clicked => { root.open-inspector(); }
-            }
             Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text {
+                text: "Demo baseline · isolated · no live system activation";
+                color: BlobTheme.text-faint;
+                font-size: 10px;
+                vertical-alignment: center;
+            }
         }
     }
 }
