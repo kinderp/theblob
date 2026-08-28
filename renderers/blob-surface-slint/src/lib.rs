@@ -5,10 +5,28 @@ use std::rc::Rc;
 
 use blob_mvp::VerticalSliceOutcome;
 use blob_surface_app::{
-    PrimarySurface, SurfaceApplication, SurfaceEffect, SurfaceIntent, TechnicianIntent,
+    PrimarySurface, SurfaceApplication, SurfaceEffect, SurfaceIntent, TechnicianEvidenceContext,
+    TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
 };
 
 slint::include_modules!();
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TechnicianProjectionSet {
+    pub explain: TechnicianProjection,
+    pub teach: TechnicianProjection,
+    pub prepare: TechnicianProjection,
+}
+
+impl TechnicianProjectionSet {
+    fn for_intent(&self, intent: TechnicianIntent) -> &TechnicianProjection {
+        match intent {
+            TechnicianIntent::ExplainCurrent => &self.explain,
+            TechnicianIntent::TeachCurrent => &self.teach,
+            TechnicianIntent::PrepareNextStep => &self.prepare,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DevelopmentSurfaceSnapshot {
@@ -19,10 +37,13 @@ pub struct DevelopmentSurfaceSnapshot {
     pub verifier_summary: String,
     pub execution_output: String,
     pub causal_summary: String,
+    pub technician: TechnicianProjectionSet,
 }
 
 impl DevelopmentSurfaceSnapshot {
-    pub fn from_vertical_slice(outcome: &VerticalSliceOutcome) -> Self {
+    pub fn from_vertical_slice(
+        outcome: &VerticalSliceOutcome,
+    ) -> Result<Self, TechnicianProjectionError> {
         let binding = outcome
             .plan
             .resolved_capabilities
@@ -56,7 +77,19 @@ impl DevelopmentSurfaceSnapshot {
             .collect::<Vec<_>>()
             .join("\n");
 
-        Self {
+        let context = TechnicianEvidenceContext {
+            situation: &outcome.situation,
+            task: &outcome.task,
+            plan: &outcome.plan,
+            causal_records: &outcome.causal_records,
+        };
+        let technician = TechnicianProjectionSet {
+            explain: context.project(TechnicianIntent::ExplainCurrent)?,
+            teach: context.project(TechnicianIntent::TeachCurrent)?,
+            prepare: context.project(TechnicianIntent::PrepareNextStep)?,
+        };
+
+        Ok(Self {
             workspace_title: "Development · The Blob".into(),
             situation_summary: outcome.situation.summary.clone(),
             task_status: format!("{:?}", outcome.task.state),
@@ -64,7 +97,8 @@ impl DevelopmentSurfaceSnapshot {
             verifier_summary: verifier,
             execution_output: execution,
             causal_summary,
-        }
+            technician,
+        })
     }
 }
 
@@ -78,25 +112,37 @@ fn page_index(page: PrimarySurface) -> i32 {
     }
 }
 
-fn technician_status(intent: TechnicianIntent) -> &'static str {
-    match intent {
-        TechnicianIntent::ExplainCurrent => {
-            "Explain intent recorded · read-only evidence projection only"
-        }
-        TechnicianIntent::TeachCurrent => {
-            "Teach intent recorded · no system mutation or hidden execution"
-        }
-        TechnicianIntent::PrepareNextStep => {
-            "Prepare intent recorded · no backend action has been authorized or started"
-        }
+fn projection_detail(projection: &TechnicianProjection) -> String {
+    let mut lines = projection
+        .details
+        .iter()
+        .take(2)
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some(next) = projection.next_steps.first() {
+        lines.push(format!("Next: {next}"));
     }
+    if let Some(safety) = projection.safety_notes.first() {
+        lines.push(format!("Safety: {safety}"));
+    }
+    lines.join("\n")
 }
 
-fn apply_effect(ui: &BlobShell, effect: SurfaceEffect) {
+fn apply_effect(ui: &BlobShell, effect: SurfaceEffect, technician: &TechnicianProjectionSet) {
     match effect {
         SurfaceEffect::PageChanged(page) => ui.set_active_page(page_index(page)),
         SurfaceEffect::TechnicianIntentRecorded(intent) => {
-            ui.set_technician_status(technician_status(intent).into());
+            let projection = technician.for_intent(intent);
+            ui.set_technician_title(projection.title.clone().into());
+            ui.set_technician_body(projection.summary.clone().into());
+            ui.set_technician_detail(projection_detail(projection).into());
+            ui.set_technician_status(
+                format!(
+                    "Evidence-backed · required autonomy {:?} · no execution authority granted",
+                    projection.required_autonomy
+                )
+                .into(),
+            );
         }
     }
 }
@@ -112,109 +158,119 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     ui.set_causal_summary(snapshot.causal_summary.clone().into());
 
     let app = Rc::new(RefCell::new(SurfaceApplication::default()));
+    let technician = Rc::new(snapshot.technician.clone());
     ui.set_active_page(page_index(app.borrow().current()));
 
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_navigate_now(move || {
             let effect = app
                 .borrow_mut()
                 .apply(SurfaceIntent::Navigate(PrimarySurface::Now));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_navigate_workspace(move || {
             let effect = app
                 .borrow_mut()
                 .apply(SurfaceIntent::Navigate(PrimarySurface::CurrentWorkspace));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_navigate_history(move || {
             let effect = app
                 .borrow_mut()
                 .apply(SurfaceIntent::Navigate(PrimarySurface::History));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_navigate_fabric(move || {
             let effect = app
                 .borrow_mut()
                 .apply(SurfaceIntent::Navigate(PrimarySurface::Fabric));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_open_inspector(move || {
             let effect = app.borrow_mut().apply(SurfaceIntent::OpenInspector);
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_close_inspector(move || {
             let effect = app.borrow_mut().apply(SurfaceIntent::CloseInspector);
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_technician_explain(move || {
             let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
                 TechnicianIntent::ExplainCurrent,
             ));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_technician_teach(move || {
             let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
                 TechnicianIntent::TeachCurrent,
             ));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let app = Rc::clone(&app);
+        let technician = Rc::clone(&technician);
         ui.on_technician_prepare(move || {
             let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
                 TechnicianIntent::PrepareNextStep,
             ));
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect);
+                apply_effect(&ui, effect, &technician);
             }
         });
     }
