@@ -40,6 +40,10 @@
           bluetoothDemoGenerated
         ];
       }).config.system.build.toplevel;
+      bluetoothDemoTest = import ./system-workspace-bluetooth-demo-test.nix {
+        inherit pkgs bluetoothDemoGenerated bluetoothDemoSystem;
+        lib = nixpkgs.lib;
+      };
     in
     {
       nixosConfigurations.blob-pilot = mkBlobPilot [ ];
@@ -89,10 +93,7 @@
           imports = [ ./candidate-source-quiescence-test.nix ];
         };
         system-workspace-bluetooth-demo = pkgs.testers.runNixOSTest {
-          imports = [ ./system-workspace-bluetooth-demo-test.nix ];
-          specialArgs = {
-            inherit bluetoothDemoGenerated bluetoothDemoSystem;
-          };
+          imports = [ bluetoothDemoTest ];
         };
       };
     };
