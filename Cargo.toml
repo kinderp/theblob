@@ -11,6 +11,7 @@ members = [
     "crates/blob-history",
     "crates/blob-mvp",
     "crates/blob-technician",
+    "crates/blob-surface-app",
     "backends/blob-nix-nixos",
     "backends/blob-nix-nixos-activation",
     "backends/blob-nix-nixos-privileged-helper",
