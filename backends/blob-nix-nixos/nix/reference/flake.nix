@@ -37,7 +37,7 @@
         inherit system;
         modules = [
           ./base.nix
-          bluetoothDemoGenerated
+          "${bluetoothDemoGenerated}"
         ];
       }).config.system.build.toplevel;
       bluetoothDemoTest = import ./system-workspace-bluetooth-demo-test.nix {
