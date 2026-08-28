@@ -1,22 +1,7 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, bluetoothDemoGenerated, bluetoothDemoSystem, ... }:
 let
   sourceRoot = lib.cleanSource ../../../..;
   trustedBaseModule = pkgs.writeText "blob-system-workspace-demo-base.nix" (builtins.readFile ./base.nix);
-  expectedGeneratedModule = pkgs.writeText "blob-system-workspace-demo-generated.nix" ''
-    { pkgs, ... }:
-    {
-      networking.hostName = "blob-demo";
-      nixpkgs.hostPlatform = "x86_64-linux";
-      hardware.bluetooth.enable = true;
-      services.pipewire.enable = true;
-      services.printing.enable = false;
-    }
-  '';
-  seededBluetoothDemoSystem =
-    (import (pkgs.path + "/nixos/lib/eval-config.nix") {
-      system = "x86_64-linux";
-      modules = [ trustedBaseModule expectedGeneratedModule ];
-    }).config.system.build.toplevel;
 
   harnesses = pkgs.stdenv.mkDerivation {
     pname = "blob-system-workspace-bluetooth-demo-vm";
@@ -64,16 +49,15 @@ in
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nix.settings.substituters = lib.mkForce [ ];
 
-    # The nested validation VM is intentionally offline. Seed the exact
-    # Bluetooth demo system as a store fixture so this checkpoint proves the
-    # product composition/identity path without accidentally testing external
-    # source availability. The runtime producer still has to recreate the
-    # semantic candidate and exact output identity independently.
+    # The nested validation VM is deliberately offline. The exact expected
+    # Bluetooth demo closure is materialized by the outer flake evaluation and
+    # copied into the VM's store. Runtime code still receives only semantic
+    # SystemSpec state and must independently derive source, derivation and output.
     system.extraDependencies = [
       pkgs.path
       trustedBaseModule
-      expectedGeneratedModule
-      seededBluetoothDemoSystem
+      bluetoothDemoGenerated
+      bluetoothDemoSystem
     ];
 
     users.users.alice = {
@@ -120,7 +104,8 @@ in
     NIX_STORE = "${pkgs.nix}/bin/nix-store"
     NIXPKGS = "${pkgs.path}"
     BASE = "${trustedBaseModule}"
-    EXPECTED_GENERATED = "${expectedGeneratedModule}"
+    EXPECTED_GENERATED = "${bluetoothDemoGenerated}"
+    SEEDED_SYSTEM = "${bluetoothDemoSystem}"
     STAGING = "/var/lib/theblob/candidate-source-staging"
 
     def field(output, key):
@@ -130,6 +115,7 @@ in
 
     machine.start()
     machine.wait_for_unit("multi-user.target")
+    machine.succeed("test -e " + shlex.quote(SEEDED_SYSTEM))
 
     # Product side: render the canonical request from the backend-neutral
     # System Workspace proposal. The unprivileged caller emits no Nix/native field.
@@ -194,6 +180,7 @@ in
     assert field(worked, "source") == source, worked
     build_target = field(worked, "build-target")
     expected_output = field(worked, "expected-output")
+    assert expected_output == SEEDED_SYSTEM, (expected_output, SEEDED_SYSTEM, worked)
 
     # Materialization itself remains non-root. Root completion verifies the exact
     # realized output; it does not silently become the builder.
