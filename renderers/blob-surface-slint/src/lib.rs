@@ -3,11 +3,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use blob_core::{FeatureState, SystemSpec};
 use blob_mvp::VerticalSliceOutcome;
 use blob_surface_app::{
     PrimarySurface, SurfaceApplication, SurfaceEffect, SurfaceIntent, TechnicianEvidenceContext,
     TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
 };
+use blob_system_workspace::{demo_baseline_system_spec, SystemWorkspaceProposal};
 
 slint::include_modules!();
 
@@ -102,6 +104,51 @@ impl DevelopmentSurfaceSnapshot {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemWorkspaceSurfaceSnapshot {
+    pub title: String,
+    pub mode: String,
+    pub bluetooth_enabled: bool,
+    pub bluetooth_label: String,
+    pub pipewire_label: String,
+    pub printing_label: String,
+}
+
+impl SystemWorkspaceSurfaceSnapshot {
+    pub fn demo() -> Self {
+        let baseline = demo_baseline_system_spec();
+        Self {
+            title: "Personal Computer".into(),
+            mode: "AI Designed".into(),
+            bluetooth_enabled: feature_enabled(&baseline, "bluetooth"),
+            bluetooth_label: feature_label(&baseline, "bluetooth", "Bluetooth"),
+            pipewire_label: feature_label(&baseline, "pipewire", "PipeWire"),
+            printing_label: feature_label(&baseline, "printing", "Printing"),
+        }
+    }
+}
+
+fn feature_state<'a>(spec: &'a SystemSpec, feature: &str) -> Option<&'a FeatureState> {
+    spec.profile
+        .features
+        .iter()
+        .find(|selection| selection.feature.as_str() == feature)
+        .map(|selection| &selection.state)
+}
+
+fn feature_enabled(spec: &SystemSpec, feature: &str) -> bool {
+    matches!(feature_state(spec, feature), Some(FeatureState::Enabled))
+}
+
+fn feature_label(spec: &SystemSpec, feature: &str, display_name: &str) -> String {
+    let state = match feature_state(spec, feature) {
+        Some(FeatureState::Enabled) => "enabled",
+        Some(FeatureState::Disabled) => "disabled",
+        None => "unset",
+    };
+    format!("{display_name} {state}")
+}
+
 fn page_index(page: PrimarySurface) -> i32 {
     match page {
         PrimarySurface::Now => 0,
@@ -147,6 +194,28 @@ fn apply_effect(ui: &BlobShell, effect: SurfaceEffect, technician: &TechnicianPr
     }
 }
 
+fn apply_bluetooth_proposal(ui: &BlobShell, proposal: &SystemWorkspaceProposal) {
+    ui.set_system_proposal_pending(true);
+    ui.set_system_proposal_title(proposal.title.clone().into());
+    ui.set_system_proposal_summary(proposal.desired_outcome.clone().into());
+    ui.set_system_proposal_diff(proposal.semantic_diff_lines().join(" · ").into());
+    ui.set_technician_title("Bluetooth change proposed".into());
+    ui.set_technician_body(
+        "The switch created a validated semantic SystemSpec proposal. Bluetooth is still off in the baseline because no backend or authority step has run."
+            .into(),
+    );
+    ui.set_technician_detail(
+        format!(
+            "Semantic diff: {}\nNext boundary: deterministic backend translation and candidate verification.",
+            proposal.semantic_diff_lines().join(" · ")
+        )
+        .into(),
+    );
+    ui.set_technician_status(
+        "Proposal only · no raw Nix emitted by the UI · no activation authority granted".into(),
+    );
+}
+
 pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::PlatformError> {
     let ui = BlobShell::new()?;
     ui.set_workspace_title(snapshot.workspace_title.clone().into());
@@ -156,6 +225,14 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     ui.set_verifier_summary(snapshot.verifier_summary.clone().into());
     ui.set_execution_output(snapshot.execution_output.clone().into());
     ui.set_causal_summary(snapshot.causal_summary.clone().into());
+
+    let system = SystemWorkspaceSurfaceSnapshot::demo();
+    ui.set_system_workspace_title(system.title.clone().into());
+    ui.set_system_mode(system.mode.clone().into());
+    ui.set_bluetooth_enabled(system.bluetooth_enabled);
+    ui.set_bluetooth_label(system.bluetooth_label.clone().into());
+    ui.set_pipewire_label(system.pipewire_label.clone().into());
+    ui.set_printing_label(system.printing_label.clone().into());
 
     let app = Rc::new(RefCell::new(SurfaceApplication::default()));
     let technician = Rc::new(snapshot.technician.clone());
@@ -274,6 +351,52 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
             }
         });
     }
+    {
+        let weak = ui.as_weak();
+        ui.on_system_propose_bluetooth(move || {
+            let proposal = SystemWorkspaceProposal::bluetooth_demo();
+            if let Some(ui) = weak.upgrade() {
+                apply_bluetooth_proposal(&ui, &proposal);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        ui.on_system_clear_proposal(move || {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_system_proposal_pending(false);
+                ui.set_system_proposal_title("".into());
+                ui.set_system_proposal_summary("".into());
+                ui.set_system_proposal_diff("".into());
+            }
+        });
+    }
 
     ui.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn system_surface_reads_the_semantic_demo_baseline() {
+        let snapshot = SystemWorkspaceSurfaceSnapshot::demo();
+        assert!(!snapshot.bluetooth_enabled);
+        assert_eq!(snapshot.bluetooth_label, "Bluetooth disabled");
+        assert_eq!(snapshot.pipewire_label, "PipeWire enabled");
+        assert_eq!(snapshot.printing_label, "Printing disabled");
+    }
+
+    #[test]
+    fn bluetooth_surface_action_is_a_semantic_proposal_not_local_state_mutation() {
+        let baseline = SystemWorkspaceSurfaceSnapshot::demo();
+        let proposal = SystemWorkspaceProposal::bluetooth_demo();
+
+        assert!(!baseline.bluetooth_enabled);
+        assert_eq!(
+            proposal.semantic_diff_lines(),
+            vec!["feature:bluetooth: disabled -> enabled"]
+        );
+    }
 }
