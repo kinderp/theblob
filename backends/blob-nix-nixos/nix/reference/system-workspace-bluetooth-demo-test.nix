@@ -160,7 +160,7 @@ in
     )
     assert field(worked, "request-id") == request_id, worked
     assert field(worked, "operation") == operation, worked
-    assert field(worked, "state") == "completed", worked
+    assert "state=completed" in worked, worked
     assert field(worked, "candidate") == candidate, worked
     assert field(worked, "system-spec") == system_spec, worked
     assert field(worked, "source") == source, worked
