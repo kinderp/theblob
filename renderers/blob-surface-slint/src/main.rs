@@ -83,6 +83,7 @@ fn main() -> Result<(), slint::PlatformError> {
     )
     .expect("the validated MVP demo flow should complete before rendering");
 
-    let snapshot = DevelopmentSurfaceSnapshot::from_vertical_slice(&outcome);
+    let snapshot = DevelopmentSurfaceSnapshot::from_vertical_slice(&outcome)
+        .expect("the Technician projection must match the validated MVP binding");
     show(&snapshot)
 }
