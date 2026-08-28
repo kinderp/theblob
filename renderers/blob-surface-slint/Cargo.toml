@@ -19,3 +19,6 @@ blob-core = { path = "../../crates/blob-core" }
 blob-mvp = { path = "../../crates/blob-mvp" }
 blob-resolver = { path = "../../crates/blob-resolver" }
 blob-executor = { path = "../../crates/blob-executor" }
+
+[build-dependencies]
+slint-build = "=1.17.1"
