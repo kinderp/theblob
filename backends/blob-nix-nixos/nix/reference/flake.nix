@@ -16,6 +16,30 @@
           ./generated.nix
         ] ++ extraModules;
       };
+
+      # Hermetic fixture for the product-level Bluetooth composition test. This
+      # is evaluated and materialized by the outer Nix build, where the pinned
+      # nixpkgs cache is available, then copied into the deliberately offline
+      # nested VM through system.extraDependencies. Runtime code does not get
+      # this path as authority input; it must independently derive the same
+      # SystemSpec translation and exact Nix output identity.
+      bluetoothDemoGenerated = pkgs.writeText "blob-system-workspace-demo-generated.nix" ''
+        { pkgs, ... }:
+        {
+          networking.hostName = "blob-demo";
+          nixpkgs.hostPlatform = "x86_64-linux";
+          hardware.bluetooth.enable = true;
+          services.pipewire.enable = true;
+          services.printing.enable = false;
+        }
+      '';
+      bluetoothDemoSystem = (nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          ./base.nix
+          bluetoothDemoGenerated
+        ];
+      }).config.system.build.toplevel;
     in
     {
       nixosConfigurations.blob-pilot = mkBlobPilot [ ];
@@ -66,6 +90,9 @@
         };
         system-workspace-bluetooth-demo = pkgs.testers.runNixOSTest {
           imports = [ ./system-workspace-bluetooth-demo-test.nix ];
+          specialArgs = {
+            inherit bluetoothDemoGenerated bluetoothDemoSystem;
+          };
         };
       };
     };
