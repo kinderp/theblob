@@ -20,6 +20,7 @@ export component BlobShell inherits Window {
 
     in property <int> focused-workspace: 0;
     in property <int> expanded-workspace: -1;
+    in-out property <string> blob-style: "soft3d";
     in-out property <string> prompt-text: "";
     in property <string> prompt-status: "romeo · system · bluetooth · why";
 
@@ -95,6 +96,32 @@ export component BlobShell inherits Window {
                 Text { text: root.focused-workspace == 2 ? "3:System*" : "3:System"; color: root.focused-workspace == 2 ? BlobTheme.system : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
                 Text { text: root.focused-workspace == 3 ? "4:Notes*" : "4:Notes"; color: root.focused-workspace == 3 ? BlobTheme.notes : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                Text {
+                    text: "[3D]";
+                    color: root.blob-style == "soft3d" ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 9px;
+                    font-weight: root.blob-style == "soft3d" ? 600 : 400;
+                    vertical-alignment: center;
+                    three-d-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "soft3d"; } }
+                }
+                Text {
+                    text: "[PIXEL]";
+                    color: root.blob-style == "pixel" ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 9px;
+                    font-weight: root.blob-style == "pixel" ? 600 : 400;
+                    vertical-alignment: center;
+                    pixel-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "pixel"; } }
+                }
+                Text {
+                    text: "[ASCII]";
+                    color: root.blob-style == "ascii" ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 9px;
+                    font-weight: root.blob-style == "ascii" ? 600 : 400;
+                    vertical-alignment: center;
+                    ascii-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "ascii"; } }
+                }
+
                 Text { text: "mode: " + (root.expanded-workspace < 0 ? "world" : "world+surfaces"); color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
                 Text { text: "surface-host: slint"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
                 Text { text: "placement: local"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
@@ -108,6 +135,7 @@ export component BlobShell inherits Window {
             BlobWorld {
                 focused-workspace: root.focused-workspace;
                 expanded-workspace: root.expanded-workspace;
+                blob-style: root.blob-style;
                 situation-summary: root.situation-summary;
                 task-status: root.task-status;
                 binding-summary: root.binding-summary;
@@ -124,7 +152,7 @@ export component BlobShell inherits Window {
                 activate-workspace(index) => { root.activate-workspace(index); }
                 collapse-workspaces => { root.collapse-workspaces(); }
                 system-propose-bluetooth => { root.system-propose-bluetooth(); }
-                system-clear-proposal => { root.system-clear-proposal(); }
+                system-clear-proposal => { root.system-clear_proposal(); }
                 explain-current => { root.explain-current(); }
                 show-details => { root.show-details(); }
             }
