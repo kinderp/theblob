@@ -13,15 +13,17 @@ export component SurfaceTile inherits Rectangle {
     min-height: 150px;
     background: tile-touch.has-hover ? BlobTheme.surface-raised : BlobTheme.surface;
     border-color: root.active ? root.accent : BlobTheme.border;
-    border-width: root.active ? 2px : 1px;
+    border-width: 1px;
     border-radius: BlobTheme.radius-lg;
+    animate background, border-color { duration: 120ms; }
 
+    // A restrained role marker instead of a bright dashboard-style stripe.
     Rectangle {
         x: 0px;
-        y: 0px;
-        width: 4px;
-        height: parent.height;
-        border-radius: 2px;
+        y: 12px;
+        width: 2px;
+        height: parent.height - 24px;
+        border-radius: 1px;
         background: root.accent;
     }
 
@@ -35,16 +37,14 @@ export component SurfaceTile inherits Rectangle {
             Text {
                 text: root.title;
                 color: BlobTheme.text;
-                font-family: "monospace";
-                font-size: 15px;
-                font-weight: 700;
+                font-size: 13px;
+                font-weight: 600;
                 vertical-alignment: center;
             }
             Rectangle { horizontal-stretch: 1; background: transparent; }
             Text {
                 text: root.subtitle;
-                color: root.accent;
-                font-family: "monospace";
+                color: root.active ? root.accent : BlobTheme.text-faint;
                 font-size: 10px;
                 vertical-alignment: center;
             }
@@ -53,8 +53,8 @@ export component SurfaceTile inherits Rectangle {
         Text {
             text: root.body;
             color: BlobTheme.text-muted;
-            font-family: "monospace";
             font-size: 12px;
+            font-weight: 400;
             wrap: word-wrap;
             vertical-stretch: 1;
         }
@@ -62,7 +62,6 @@ export component SurfaceTile inherits Rectangle {
         if root.footer != "": Text {
             text: root.footer;
             color: BlobTheme.text-faint;
-            font-family: "monospace";
             font-size: 10px;
             wrap: word-wrap;
         }
