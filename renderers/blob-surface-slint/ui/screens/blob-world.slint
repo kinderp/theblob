@@ -33,16 +33,15 @@ export component BlobWorld inherits Rectangle {
 
     if root.expanded-workspace < 0: VerticalLayout {
         padding: BlobTheme.space-8;
-        spacing: BlobTheme.space-6;
+        spacing: BlobTheme.space-5;
 
         Rectangle { vertical-stretch: 1; background: transparent; }
 
         Text {
-            text: "YOUR WORLDS";
+            text: ":: workspaces";
             color: BlobTheme.text-faint;
-            font-family: "monospace";
-            font-size: 11px;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 500;
             horizontal-alignment: center;
         }
 
@@ -89,10 +88,9 @@ export component BlobWorld inherits Rectangle {
         }
 
         Text {
-            text: "click a Blob · Cmd+1..4 focus · Cmd+T unfold · ? explain";
+            text: "select :: click blob   |   focus :: cmd+1..4   |   unfold :: cmd+t   |   explain :: ?";
             color: BlobTheme.text-faint;
-            font-family: "monospace";
-            font-size: 10px;
+            font-size: 9px;
             horizontal-alignment: center;
         }
 
@@ -129,17 +127,15 @@ export component BlobWorld inherits Rectangle {
             VerticalLayout {
                 spacing: 2px;
                 Text {
-                    text: root.expanded-workspace == 0 ? "ROMEO" : root.expanded-workspace == 1 ? "DOCS" : root.expanded-workspace == 2 ? "SYSTEM" : "NOTES";
+                    text: root.expanded-workspace == 0 ? "ws/romeo" : root.expanded-workspace == 1 ? "ws/docs" : root.expanded-workspace == 2 ? "ws/system" : "ws/notes";
                     color: BlobTheme.text;
-                    font-family: "monospace";
-                    font-size: 19px;
-                    font-weight: 700;
+                    font-size: 17px;
+                    font-weight: 600;
                 }
                 Text {
-                    text: "Workspace unfolded into semantic Surfaces";
+                    text: "semantic surfaces :: local instance";
                     color: BlobTheme.text-faint;
-                    font-family: "monospace";
-                    font-size: 10px;
+                    font-size: 9px;
                 }
             }
 
@@ -260,9 +256,8 @@ export component BlobWorld inherits Rectangle {
                             Text {
                                 text: "CONTROLS";
                                 color: BlobTheme.text;
-                                font-family: "monospace";
-                                font-size: 15px;
-                                font-weight: 700;
+                                font-size: 13px;
+                                font-weight: 600;
                             }
                             Rectangle { horizontal-stretch: 1; background: transparent; }
                             BlobStatus {
@@ -274,15 +269,13 @@ export component BlobWorld inherits Rectangle {
                         Text {
                             text: "Bluetooth";
                             color: BlobTheme.text;
-                            font-family: "monospace";
-                            font-size: 20px;
-                            font-weight: 700;
+                            font-size: 18px;
+                            font-weight: 600;
                         }
                         Text {
                             text: root.bluetooth-label;
                             color: BlobTheme.text-muted;
-                            font-family: "monospace";
-                            font-size: 12px;
+                            font-size: 11px;
                         }
 
                         BlobAction {
@@ -301,10 +294,10 @@ export component BlobWorld inherits Rectangle {
                             VerticalLayout {
                                 padding: BlobTheme.space-4;
                                 spacing: BlobTheme.space-2;
-                                Text { text: root.proposal-title; color: BlobTheme.warning; font-family: "monospace"; font-size: 12px; font-weight: 700; }
-                                Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: 11px; wrap: word-wrap; }
-                                Text { text: root.proposal-diff; color: BlobTheme.system; font-family: "monospace"; font-size: 10px; wrap: word-wrap; }
-                                Text { text: "Baseline remains OFF until backend + authority complete."; color: BlobTheme.text-faint; font-size: 10px; wrap: word-wrap; }
+                                Text { text: root.proposal-title; color: BlobTheme.warning; font-size: 11px; font-weight: 600; }
+                                Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: 10px; wrap: word-wrap; }
+                                Text { text: root.proposal-diff; color: BlobTheme.system; font-size: 10px; wrap: word-wrap; }
+                                Text { text: "Baseline remains OFF until backend + authority complete."; color: BlobTheme.text-faint; font-size: 9px; wrap: word-wrap; }
                             }
                         }
 
