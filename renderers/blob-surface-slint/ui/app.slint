@@ -45,37 +45,45 @@ export component BlobShell inherits Window {
     height: 900px;
     background: BlobTheme.canvas;
 
-    // Experimental Arch/terminal-like P0 typography. SF Mono gives the macOS
-    // demo a dense coding face; hosts without it may fall back at runtime.
-    // This is intentionally a reversible visual experiment, not a font engine.
-    default-font-family: "SF Mono";
-    default-font-size: 12px;
+    // Dense terminal-style face for the macOS demo. No font is bundled in P0;
+    // Menlo is intentionally mundane, readable and recognisably terminal-like.
+    default-font-family: "Menlo";
+    default-font-size: 11px;
     default-font-weight: 400;
 
     VerticalLayout {
         spacing: 0px;
 
+        // Primary status line: deliberately closer to a WM/terminal status bar
+        // than to an application toolbar.
         Rectangle {
-            height: BlobTheme.header-height;
-            background: BlobTheme.surface;
+            height: 28px;
+            background: #080b0e;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
 
             HorizontalLayout {
-                padding-left: BlobTheme.space-4;
-                padding-right: BlobTheme.space-4;
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
                 spacing: BlobTheme.space-3;
 
                 Text {
-                    text: "blob@local";
+                    text: "[blob@local]";
                     color: BlobTheme.accent;
-                    font-size: 11px;
+                    font-size: 10px;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
 
                 Text {
-                    text: ":: ws [1:romeo 2:docs 3:system 4:notes]";
+                    text: ":: ws=" + (root.focused-workspace == 0 ? "romeo" : root.focused-workspace == 1 ? "docs" : root.focused-workspace == 2 ? "system" : "notes");
+                    color: BlobTheme.text;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: ":: mode=" + (root.expanded-workspace < 0 ? "world" : "tile");
                     color: BlobTheme.text-muted;
                     font-size: 10px;
                     vertical-alignment: center;
@@ -84,11 +92,32 @@ export component BlobShell inherits Window {
                 Rectangle { horizontal-stretch: 1; background: transparent; }
 
                 Text {
-                    text: "fabric/1 :: local :: p0";
+                    text: "fabric=local/1 :: surface-host=slint :: authority=user";
                     color: BlobTheme.text-faint;
-                    font-size: 10px;
+                    font-size: 9px;
                     vertical-alignment: center;
                 }
+            }
+        }
+
+        // Secondary command index line: compact and keyboard-first.
+        Rectangle {
+            height: 24px;
+            background: BlobTheme.surface;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                spacing: BlobTheme.space-4;
+
+                Text { text: "1:romeo"; color: root.focused-workspace == 0 ? BlobTheme.accent : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: "2:docs"; color: root.focused-workspace == 1 ? BlobTheme.accent : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: "3:system"; color: root.focused-workspace == 2 ? BlobTheme.accent : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: "4:notes"; color: root.focused-workspace == 3 ? BlobTheme.accent : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Text { text: "[? explain] [home collapse] [enter exec]"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
             }
         }
 
@@ -138,19 +167,19 @@ export component BlobShell inherits Window {
 
         Rectangle {
             height: BlobTheme.prompt-height;
-            background: BlobTheme.surface;
+            background: #080b0e;
             border-color: BlobTheme.border;
             border-width: 1px;
 
             HorizontalLayout {
-                padding-left: BlobTheme.space-4;
-                padding-right: BlobTheme.space-4;
-                spacing: BlobTheme.space-3;
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                spacing: BlobTheme.space-2;
 
                 Text {
-                    text: "λ";
+                    text: "blob:" + (root.focused-workspace == 0 ? "romeo" : root.focused-workspace == 1 ? "docs" : root.focused-workspace == 2 ? "system" : "notes") + " %";
                     color: BlobTheme.accent;
-                    font-size: 15px;
+                    font-size: 11px;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
@@ -160,7 +189,7 @@ export component BlobShell inherits Window {
                     text <=> root.prompt-text;
                     color: BlobTheme.text;
                     selection-background-color: BlobTheme.accent-soft;
-                    font-size: 12px;
+                    font-size: 11px;
                     single-line: true;
                     accepted => {
                         root.submit-prompt(root.prompt-text);
@@ -168,9 +197,9 @@ export component BlobShell inherits Window {
                 }
 
                 Text {
-                    text: root.prompt-status;
+                    text: ":: " + root.prompt-status;
                     color: BlobTheme.text-faint;
-                    font-size: 9px;
+                    font-size: 8px;
                     vertical-alignment: center;
                 }
             }
