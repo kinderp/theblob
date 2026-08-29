@@ -10,18 +10,49 @@ export component BlobAvatar inherits Rectangle {
     callback activated;
 
     property <bool> idle-up: false;
+    property <bool> sway-left: false;
+    property <bool> blinking: false;
+    property <bool> gesture: false;
 
     width: 224px;
     height: 250px;
     background: transparent;
 
-    // Low-frequency motion only. This uses simple property animation rather
-    // than a continuously rendered 3D scene. Long intervals keep redraw duty
-    // cycle low while preserving a visible sense of life.
+    // Slow breathing + sway. The timers only change a few vector properties;
+    // there is no continuously rendered 3D scene.
     Timer {
-        interval: root.accessory == "helmet" ? 5200ms : root.accessory == "glasses" ? 6000ms : root.accessory == "wrench" ? 5600ms : 6400ms;
+        interval: root.accessory == "helmet" ? 5000ms : root.accessory == "glasses" ? 5700ms : root.accessory == "wrench" ? 5300ms : 6100ms;
         running: true;
-        triggered() => { root.idle-up = !root.idle-up; }
+        triggered() => {
+            root.idle-up = !root.idle-up;
+            root.sway-left = !root.sway-left;
+        }
+    }
+
+    // A short autonomous blink makes the characters feel present even when the
+    // pointer is elsewhere. Different periods keep the four Blobs out of sync.
+    Timer {
+        interval: root.accessory == "helmet" ? 3900ms : root.accessory == "glasses" ? 4700ms : root.accessory == "wrench" ? 4300ms : 5200ms;
+        running: true;
+        triggered() => { root.blinking = true; }
+    }
+    Timer {
+        interval: 135ms;
+        running: root.blinking;
+        triggered() => { root.blinking = false; }
+    }
+
+    // Rare little gesture: mainly a hand lift and expression change. This is
+    // intentionally infrequent so the home screen is alive without being busy.
+    Timer {
+        interval: root.accessory == "helmet" ? 8200ms : root.accessory == "glasses" ? 9400ms : root.accessory == "wrench" ? 8800ms : 10100ms;
+        running: true;
+        triggered() => { root.gesture = true; }
+    }
+    Timer {
+        interval: 620ms;
+        running: root.gesture;
+        triggered() => { root.gesture = false; }
     }
 
     halo := Rectangle {
@@ -37,26 +68,26 @@ export component BlobAvatar inherits Rectangle {
     }
 
     character := Rectangle {
-        x: 4px;
+        x: touch.has-hover ? 4px : (root.sway-left ? 2px : 6px);
         y: touch.has-hover ? -2px : (root.idle-up ? 7px : 12px);
         width: 216px;
         height: 200px;
         background: transparent;
-        animate y { duration: touch.has-hover ? 170ms : 650ms; easing: ease-in-out; }
+        animate x, y { duration: touch.has-hover ? 170ms : 650ms; easing: ease-in-out; }
 
-        // Ground shadow separates the character from the flat Shell surface.
+        // Ground shadow separates the character from the flat Shell surface and
+        // breathes very slightly with the body.
         Rectangle {
-            x: touch.has-hover ? 64px : 55px;
+            x: touch.has-hover ? 64px : (root.idle-up ? 58px : 55px);
             y: 183px;
-            width: touch.has-hover ? 90px : 108px;
-            height: touch.has-hover ? 8px : 13px;
+            width: touch.has-hover ? 90px : (root.idle-up ? 102px : 108px);
+            height: touch.has-hover ? 8px : (root.idle-up ? 11px : 13px);
             border-radius: 7px;
             background: #00000052;
-            animate x, width, height { duration: 170ms; }
+            animate x, width, height { duration: touch.has-hover ? 170ms : 650ms; easing: ease-in-out; }
         }
 
-        // Rear depth masses: visible only around the lower/right edges and
-        // cheap to render, but enough to make the Blob read as volumetric.
+        // Rear depth masses: cheap vector layers that create a soft 3D rim.
         Rectangle {
             x: touch.has-hover ? 29px : 36px;
             y: touch.has-hover ? 60px : 55px;
@@ -76,10 +107,10 @@ export component BlobAvatar inherits Rectangle {
             animate x, y { duration: 180ms; }
         }
 
-        // Arms make these Workspaces read as characters rather than logos.
+        // Arms. Hover is an explicit hello; autonomous gesture is a smaller wave.
         Rectangle {
             x: 11px;
-            y: touch.has-hover ? 95px : 103px;
+            y: touch.has-hover ? 95px : (root.gesture ? 91px : 103px);
             width: 48px;
             height: 40px;
             border-radius: 20px;
@@ -88,7 +119,7 @@ export component BlobAvatar inherits Rectangle {
         }
         Rectangle {
             x: 160px;
-            y: touch.has-hover ? 61px : 101px;
+            y: touch.has-hover ? 61px : (root.gesture ? 72px : 101px);
             width: 48px;
             height: 40px;
             border-radius: 20px;
@@ -96,72 +127,72 @@ export component BlobAvatar inherits Rectangle {
             animate y { duration: 220ms; easing: ease-out; }
         }
 
-        // Main organic mass subtly squashes and stretches when acknowledged.
+        // Main organic mass: slow breathing in idle, stronger squash on hover.
         body := Rectangle {
-            x: touch.has-hover ? 23px : 30px;
-            y: touch.has-hover ? 52px : 47px;
-            width: touch.has-hover ? 172px : 158px;
-            height: touch.has-hover ? 118px : 126px;
+            x: touch.has-hover ? 23px : (root.idle-up ? 28px : 30px);
+            y: touch.has-hover ? 52px : (root.idle-up ? 49px : 47px);
+            width: touch.has-hover ? 172px : (root.idle-up ? 162px : 158px);
+            height: touch.has-hover ? 118px : (root.idle-up ? 123px : 128px);
             border-radius: 63px;
             background: root.blob-color;
-            animate x, y, width, height { duration: 180ms; easing: ease-out; }
+            animate x, y, width, height { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
         Rectangle {
             x: touch.has-hover ? 18px : 23px;
-            y: touch.has-hover ? 86px : 82px;
+            y: touch.has-hover ? 86px : (root.idle-up ? 84px : 82px);
             width: 58px;
             height: 70px;
             border-radius: 29px;
             background: root.blob-color;
-            animate x, y { duration: 180ms; }
+            animate x, y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
         Rectangle {
             x: touch.has-hover ? 145px : 139px;
-            y: touch.has-hover ? 83px : 78px;
+            y: touch.has-hover ? 83px : (root.idle-up ? 80px : 78px);
             width: 59px;
             height: 73px;
             border-radius: 30px;
             background: root.blob-color;
-            animate x, y { duration: 180ms; }
+            animate x, y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
         Rectangle {
             x: 47px;
-            y: touch.has-hover ? 35px : 30px;
+            y: touch.has-hover ? 35px : (root.idle-up ? 32px : 30px);
             width: 63px;
             height: 66px;
             border-radius: 32px;
             background: root.blob-color;
-            animate y { duration: 180ms; }
+            animate y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
         Rectangle {
             x: 101px;
-            y: touch.has-hover ? 39px : 34px;
+            y: touch.has-hover ? 39px : (root.idle-up ? 36px : 34px);
             width: 66px;
             height: 62px;
             border-radius: 31px;
             background: root.blob-color;
-            animate y { duration: 180ms; }
+            animate y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
 
-        // Lightweight pseudo-3D lighting: translucent vector highlights and a
-        // lower-right shade. No texture, shader or real-time 3D scene required.
+        // Lightweight pseudo-3D lighting. Highlights drift with breathing so the
+        // volume reads as soft material rather than a flat sticker.
         Rectangle {
-            x: touch.has-hover ? 43px : 49px;
-            y: touch.has-hover ? 58px : 53px;
+            x: touch.has-hover ? 43px : (root.sway-left ? 47px : 51px);
+            y: touch.has-hover ? 58px : (root.idle-up ? 55px : 53px);
             width: touch.has-hover ? 76px : 68px;
             height: 31px;
             border-radius: 16px;
             background: #ffffff28;
-            animate x, y, width { duration: 180ms; }
+            animate x, y, width { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
         Rectangle {
-            x: touch.has-hover ? 49px : 55px;
-            y: touch.has-hover ? 63px : 58px;
+            x: touch.has-hover ? 49px : (root.sway-left ? 53px : 57px);
+            y: touch.has-hover ? 63px : (root.idle-up ? 60px : 58px);
             width: 36px;
             height: 13px;
             border-radius: 7px;
             background: #ffffff42;
-            animate x, y { duration: 180ms; }
+            animate x, y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; }
         }
         Rectangle {
             x: touch.has-hover ? 136px : 129px;
@@ -173,62 +204,64 @@ export component BlobAvatar inherits Rectangle {
             animate x, y { duration: 180ms; }
         }
 
-        // Three soft feet bounce up slightly on hover.
-        Rectangle { x: 49px; y: touch.has-hover ? 148px : 151px; width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; animate y { duration: 180ms; } }
-        Rectangle { x: 88px; y: touch.has-hover ? 153px : 157px; width: 42px; height: 39px; border-radius: 21px; background: root.blob-color; animate y { duration: 180ms; } }
-        Rectangle { x: 126px; y: touch.has-hover ? 148px : 151px; width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; animate y { duration: 180ms; } }
+        // Three soft feet bounce with the body.
+        Rectangle { x: 49px; y: touch.has-hover ? 148px : (root.idle-up ? 149px : 152px); width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; animate y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; } }
+        Rectangle { x: 88px; y: touch.has-hover ? 153px : (root.idle-up ? 154px : 158px); width: 42px; height: 39px; border-radius: 21px; background: root.blob-color; animate y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; } }
+        Rectangle { x: 126px; y: touch.has-hover ? 148px : (root.idle-up ? 149px : 152px); width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; animate y { duration: touch.has-hover ? 180ms : 650ms; easing: ease-in-out; } }
 
-        // Large eyes and moving pupils create acknowledgement without noisy motion.
+        // Eyes blink autonomously and acknowledge hover with a wider expression.
         left-eye := Rectangle {
             x: touch.has-hover ? 65px : 68px;
-            y: touch.has-hover ? 88px : 91px;
+            y: root.blinking ? 104px : (touch.has-hover ? 88px : 91px);
             width: touch.has-hover ? 30px : 27px;
-            height: touch.has-hover ? 34px : 29px;
+            height: root.blinking ? 4px : (touch.has-hover ? 34px : 29px);
             border-radius: 15px;
             background: BlobTheme.eye;
-            animate x, y, width, height { duration: 150ms; }
+            clip: true;
+            animate x, y, width, height { duration: root.blinking ? 70ms : 150ms; }
             Rectangle {
                 x: touch.has-hover ? 12px : 8px;
                 y: touch.has-hover ? 11px : 10px;
                 width: 9px;
-                height: 12px;
+                height: root.blinking ? 0px : 12px;
                 border-radius: 5px;
                 background: BlobTheme.ink;
-                animate x, y { duration: 150ms; }
+                animate x, y, height { duration: 100ms; }
             }
-            Rectangle { x: 17px; y: 7px; width: 4px; height: 4px; border-radius: 2px; background: #ffffff; }
+            Rectangle { x: 17px; y: 7px; width: 4px; height: root.blinking ? 0px : 4px; border-radius: 2px; background: #ffffff; }
         }
         right-eye := Rectangle {
             x: 124px;
-            y: touch.has-hover ? 88px : 91px;
+            y: root.blinking ? 104px : (touch.has-hover ? 88px : 91px);
             width: touch.has-hover ? 30px : 27px;
-            height: touch.has-hover ? 34px : 29px;
+            height: root.blinking ? 4px : (touch.has-hover ? 34px : 29px);
             border-radius: 15px;
             background: BlobTheme.eye;
-            animate y, width, height { duration: 150ms; }
+            clip: true;
+            animate y, width, height { duration: root.blinking ? 70ms : 150ms; }
             Rectangle {
                 x: touch.has-hover ? 9px : 10px;
                 y: touch.has-hover ? 11px : 10px;
                 width: 9px;
-                height: 12px;
+                height: root.blinking ? 0px : 12px;
                 border-radius: 5px;
                 background: BlobTheme.ink;
-                animate x, y { duration: 150ms; }
+                animate x, y, height { duration: 100ms; }
             }
-            Rectangle { x: 14px; y: 7px; width: 4px; height: 4px; border-radius: 2px; background: #ffffff; }
+            Rectangle { x: 14px; y: 7px; width: 4px; height: root.blinking ? 0px : 4px; border-radius: 2px; background: #ffffff; }
         }
 
-        Rectangle { x: 50px; y: 126px; width: touch.has-hover ? 20px : 17px; height: 8px; border-radius: 4px; background: BlobTheme.cheek; animate width { duration: 150ms; } }
-        Rectangle { x: 149px; y: 126px; width: touch.has-hover ? 20px : 17px; height: 8px; border-radius: 4px; background: BlobTheme.cheek; animate width { duration: 150ms; } }
+        Rectangle { x: 50px; y: 126px; width: touch.has-hover || root.gesture ? 20px : 17px; height: 8px; border-radius: 4px; background: BlobTheme.cheek; animate width { duration: 150ms; } }
+        Rectangle { x: 149px; y: 126px; width: touch.has-hover || root.gesture ? 20px : 17px; height: 8px; border-radius: 4px; background: BlobTheme.cheek; animate width { duration: 150ms; } }
 
         Text {
             x: touch.has-hover ? 88px : 91px;
             y: touch.has-hover ? 119px : 120px;
             width: touch.has-hover ? 44px : 38px;
             height: 29px;
-            text: touch.has-hover ? "⌣" : "◡";
+            text: touch.has-hover || root.gesture ? "⌣" : "◡";
             color: BlobTheme.ink;
-            font-size: touch.has-hover ? 28px : 23px;
+            font-size: touch.has-hover || root.gesture ? 28px : 23px;
             horizontal-alignment: center;
             vertical-alignment: center;
             animate x, width, font-size { duration: 150ms; }
@@ -236,7 +269,7 @@ export component BlobAvatar inherits Rectangle {
 
         if root.accessory == "helmet": Rectangle {
             x: 55px;
-            y: touch.has-hover ? 21px : 18px;
+            y: touch.has-hover ? 21px : (root.gesture ? 16px : 18px);
             width: 110px;
             height: 39px;
             border-radius: 20px;
@@ -249,13 +282,14 @@ export component BlobAvatar inherits Rectangle {
 
         if root.accessory == "glasses": Rectangle {
             x: touch.has-hover ? 54px : 55px;
-            y: touch.has-hover ? 87px : 88px;
+            y: root.blinking ? 89px : (touch.has-hover ? 87px : 88px);
             width: 53px;
             height: 38px;
             border-radius: 15px;
             background: #202124dd;
             border-color: BlobTheme.docs;
             border-width: 3px;
+            animate y { duration: 120ms; }
             Rectangle {
                 x: 57px;
                 y: 0px;
@@ -273,12 +307,12 @@ export component BlobAvatar inherits Rectangle {
 
         if root.accessory == "wrench": Text {
             x: 151px;
-            y: touch.has-hover ? 20px : 27px;
+            y: touch.has-hover ? 20px : (root.gesture ? 18px : 27px);
             width: 48px;
             height: 57px;
             text: "⚙";
             color: BlobTheme.system;
-            font-size: touch.has-hover ? 42px : 38px;
+            font-size: touch.has-hover || root.gesture ? 42px : 38px;
             horizontal-alignment: center;
             vertical-alignment: center;
             animate y, font-size { duration: 180ms; }
@@ -286,12 +320,12 @@ export component BlobAvatar inherits Rectangle {
 
         if root.accessory == "pencil": Text {
             x: 151px;
-            y: touch.has-hover ? 20px : 27px;
+            y: touch.has-hover ? 20px : (root.gesture ? 18px : 27px);
             width: 50px;
             height: 58px;
             text: "✎";
             color: BlobTheme.notes;
-            font-size: touch.has-hover ? 43px : 39px;
+            font-size: touch.has-hover || root.gesture ? 43px : 39px;
             horizontal-alignment: center;
             vertical-alignment: center;
             animate y, font-size { duration: 180ms; }
