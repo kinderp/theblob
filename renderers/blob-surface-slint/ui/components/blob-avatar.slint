@@ -15,8 +15,8 @@ export component BlobAvatar inherits Rectangle {
     height: 250px;
     background: transparent;
 
-    // Deliberately visible but slow breathing/bobbing. The character is alive;
-    // the surrounding information UI remains still.
+    // Low-frequency motion only. This uses simple property animation rather
+    // than a continuously rendered 3D scene.
     Timer {
         interval: root.accessory == "helmet" ? 2200ms : root.accessory == "glasses" ? 2600ms : root.accessory == "wrench" ? 2400ms : 2800ms;
         running: true;
@@ -43,18 +43,39 @@ export component BlobAvatar inherits Rectangle {
         background: transparent;
         animate y { duration: touch.has-hover ? 170ms : 1050ms; easing: ease-in-out; }
 
-        // Soft shadow changes with the hover lift so the motion reads clearly.
+        // Ground shadow separates the character from the flat Shell surface.
         Rectangle {
-            x: touch.has-hover ? 62px : 55px;
-            y: 181px;
-            width: touch.has-hover ? 94px : 108px;
-            height: touch.has-hover ? 9px : 13px;
+            x: touch.has-hover ? 64px : 55px;
+            y: 183px;
+            width: touch.has-hover ? 90px : 108px;
+            height: touch.has-hover ? 8px : 13px;
             border-radius: 7px;
-            background: #00000048;
+            background: #00000052;
             animate x, width, height { duration: 170ms; }
         }
 
-        // Arms make these Workspaces read as little characters rather than logos.
+        // Rear depth masses: visible only around the lower/right edges and
+        // cheap to render, but enough to make the Blob read as volumetric.
+        Rectangle {
+            x: touch.has-hover ? 29px : 36px;
+            y: touch.has-hover ? 60px : 55px;
+            width: touch.has-hover ? 173px : 158px;
+            height: touch.has-hover ? 118px : 126px;
+            border-radius: 63px;
+            background: #00000038;
+            animate x, y, width, height { duration: 180ms; easing: ease-out; }
+        }
+        Rectangle {
+            x: touch.has-hover ? 149px : 143px;
+            y: touch.has-hover ? 90px : 86px;
+            width: 58px;
+            height: 72px;
+            border-radius: 29px;
+            background: #0000002c;
+            animate x, y { duration: 180ms; }
+        }
+
+        // Arms make these Workspaces read as characters rather than logos.
         Rectangle {
             x: 11px;
             y: touch.has-hover ? 95px : 103px;
@@ -121,6 +142,36 @@ export component BlobAvatar inherits Rectangle {
             animate y { duration: 180ms; }
         }
 
+        // Lightweight pseudo-3D lighting: translucent vector highlights and a
+        // lower-right shade. No texture, shader or real-time 3D scene required.
+        Rectangle {
+            x: touch.has-hover ? 43px : 49px;
+            y: touch.has-hover ? 58px : 53px;
+            width: touch.has-hover ? 76px : 68px;
+            height: 31px;
+            border-radius: 16px;
+            background: #ffffff28;
+            animate x, y, width { duration: 180ms; }
+        }
+        Rectangle {
+            x: touch.has-hover ? 49px : 55px;
+            y: touch.has-hover ? 63px : 58px;
+            width: 36px;
+            height: 13px;
+            border-radius: 7px;
+            background: #ffffff42;
+            animate x, y { duration: 180ms; }
+        }
+        Rectangle {
+            x: touch.has-hover ? 136px : 129px;
+            y: touch.has-hover ? 126px : 129px;
+            width: 48px;
+            height: 28px;
+            border-radius: 14px;
+            background: #00000018;
+            animate x, y { duration: 180ms; }
+        }
+
         // Three soft feet bounce up slightly on hover.
         Rectangle { x: 49px; y: touch.has-hover ? 148px : 151px; width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; animate y { duration: 180ms; } }
         Rectangle { x: 88px; y: touch.has-hover ? 153px : 157px; width: 42px; height: 39px; border-radius: 21px; background: root.blob-color; animate y { duration: 180ms; } }
@@ -147,7 +198,7 @@ export component BlobAvatar inherits Rectangle {
             Rectangle { x: 17px; y: 7px; width: 4px; height: 4px; border-radius: 2px; background: #ffffff; }
         }
         right-eye := Rectangle {
-            x: touch.has-hover ? 124px : 124px;
+            x: 124px;
             y: touch.has-hover ? 88px : 91px;
             width: touch.has-hover ? 30px : 27px;
             height: touch.has-hover ? 34px : 29px;
@@ -192,6 +243,7 @@ export component BlobAvatar inherits Rectangle {
             animate y { duration: 180ms; }
             Rectangle { x: 46px; y: -7px; width: 18px; height: 46px; border-radius: 7px; background: BlobTheme.helmet-dark; }
             Rectangle { x: -9px; y: 31px; width: 128px; height: 11px; border-radius: 6px; background: BlobTheme.helmet-dark; }
+            Rectangle { x: 13px; y: 5px; width: 43px; height: 9px; border-radius: 5px; background: #ffffff30; }
         }
 
         if root.accessory == "glasses": Rectangle {
@@ -214,6 +266,8 @@ export component BlobAvatar inherits Rectangle {
                 border-width: 3px;
             }
             Rectangle { x: 48px; y: 16px; width: 12px; height: 4px; background: BlobTheme.docs; }
+            Rectangle { x: 8px; y: 6px; width: 16px; height: 5px; border-radius: 3px; background: #ffffff2d; }
+            Rectangle { x: 65px; y: 6px; width: 16px; height: 5px; border-radius: 3px; background: #ffffff2d; }
         }
 
         if root.accessory == "wrench": Text {
