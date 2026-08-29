@@ -6,13 +6,11 @@ import { SurfaceTile } from "../components/surface-tile.slint";
 export component BlobWorld inherits Rectangle {
     in property <int> focused-workspace: 0;
     in property <int> expanded-workspace: -1;
-
     in property <string> situation-summary;
     in property <string> task-status;
     in property <string> binding-summary;
     in property <string> verifier-summary;
     in property <string> execution-output;
-
     in property <bool> bluetooth-enabled: false;
     in property <string> bluetooth-label: "Bluetooth disabled";
     in property <string> pipewire-label: "PipeWire enabled";
@@ -31,304 +29,194 @@ export component BlobWorld inherits Rectangle {
 
     background: BlobTheme.canvas;
 
-    if root.expanded-workspace < 0: VerticalLayout {
-        padding: BlobTheme.space-8;
-        spacing: BlobTheme.space-5;
+    VerticalLayout {
+        spacing: 0px;
 
-        Rectangle { vertical-stretch: 1; background: transparent; }
-
-        Text {
-            text: ":: workspaces";
-            color: BlobTheme.text-faint;
-            font-size: 10px;
-            font-weight: 500;
-            horizontal-alignment: center;
-        }
-
-        HorizontalLayout {
-            spacing: BlobTheme.space-5;
-            alignment: center;
-
-            BlobAvatar {
-                name: "Romeo";
-                role: "DEV";
-                status: root.task-status == "Completed" ? "tests ✓" : root.task-status;
-                accessory: "helmet";
-                blob-color: BlobTheme.dev;
-                focused: root.focused-workspace == 0;
-                activated => { root.activate-workspace(0); }
-            }
-            BlobAvatar {
-                name: "Docs";
-                role: "DOCS";
-                status: "context ready";
-                accessory: "glasses";
-                blob-color: BlobTheme.docs;
-                focused: root.focused-workspace == 1;
-                activated => { root.activate-workspace(1); }
-            }
-            BlobAvatar {
-                name: "System";
-                role: "SYSTEM";
-                status: root.proposal-pending ? "proposal pending" : "healthy";
-                accessory: "wrench";
-                blob-color: BlobTheme.system;
-                focused: root.focused-workspace == 2;
-                activated => { root.activate-workspace(2); }
-            }
-            BlobAvatar {
-                name: "Notes";
-                role: "NOTES";
-                status: "scratchpad";
-                accessory: "pencil";
-                blob-color: BlobTheme.notes;
-                focused: root.focused-workspace == 3;
-                activated => { root.activate-workspace(3); }
-            }
-        }
-
-        Text {
-            text: "select :: click blob   |   focus :: cmd+1..4   |   unfold :: cmd+t   |   explain :: ?";
-            color: BlobTheme.text-faint;
-            font-size: 9px;
-            horizontal-alignment: center;
-        }
-
-        Rectangle { vertical-stretch: 1; background: transparent; }
-    }
-
-    if root.expanded-workspace >= 0: VerticalLayout {
-        padding: BlobTheme.space-6;
-        spacing: BlobTheme.space-4;
-
-        HorizontalLayout {
-            spacing: BlobTheme.space-4;
-
-            Rectangle {
-                width: 42px;
-                height: 32px;
-                border-radius: BlobTheme.radius-md;
-                background: back-touch.has-hover ? BlobTheme.surface-raised : BlobTheme.surface;
-                border-color: BlobTheme.border;
-                border-width: 1px;
-                Text {
-                    text: "←";
-                    color: BlobTheme.text-muted;
-                    font-size: 18px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                back-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { root.collapse-workspaces(); }
-                }
-            }
+        Rectangle {
+            height: 278px;
+            background: #090d11;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
 
             VerticalLayout {
+                padding-top: 8px;
+                padding-bottom: 4px;
+                padding-left: BlobTheme.space-4;
+                padding-right: BlobTheme.space-4;
                 spacing: 2px;
-                Text {
-                    text: root.expanded-workspace == 0 ? "ws/romeo" : root.expanded-workspace == 1 ? "ws/docs" : root.expanded-workspace == 2 ? "ws/system" : "ws/notes";
-                    color: BlobTheme.text;
-                    font-size: 17px;
-                    font-weight: 600;
+
+                HorizontalLayout {
+                    height: 18px;
+                    Text { text: ":: workspace-presence"; color: BlobTheme.text-faint; font-size: 8px; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    Text { text: root.expanded-workspace < 0 ? "mode=world" : "mode=world+surfaces"; color: BlobTheme.text-faint; font-size: 8px; vertical-alignment: center; }
                 }
-                Text {
-                    text: "semantic surfaces :: local instance";
-                    color: BlobTheme.text-faint;
-                    font-size: 9px;
-                }
-            }
 
-            Rectangle { horizontal-stretch: 1; background: transparent; }
-
-            BlobAction {
-                width: 92px;
-                label: "Why?";
-                clicked => { root.explain-current(); }
-            }
-            BlobAction {
-                width: 104px;
-                label: "Details";
-                clicked => { root.show-details(); }
-            }
-        }
-
-        if root.expanded-workspace == 0: VerticalLayout {
-            spacing: BlobTheme.space-4;
-            vertical-stretch: 1;
-
-            HorizontalLayout {
-                spacing: BlobTheme.space-4;
-                vertical-stretch: 1;
-
-                SurfaceTile {
-                    horizontal-stretch: 3;
-                    title: "EDITOR";
-                    subtitle: "code.editor";
-                    accent: BlobTheme.dev;
-                    body: "Current context\n" + root.situation-summary + "\n\nP0 deliberately models the Editor as a Surface role; the concrete editor remains replaceable.";
-                    footer: "surface:romeo:editor · local SurfaceInstance";
-                }
-                SurfaceTile {
-                    horizontal-stretch: 2;
-                    title: "DOCS";
-                    subtitle: "docs.context";
-                    accent: BlobTheme.docs;
-                    body: "Documentation belongs to Romeo's context rather than to a separate app. A future implementation may be Blob-native or hosted.";
-                    footer: "same Workspace · independent Surface role";
-                }
-            }
-
-            HorizontalLayout {
-                spacing: BlobTheme.space-4;
-                vertical-stretch: 1;
-
-                SurfaceTile {
-                    horizontal-stretch: 2;
-                    title: "TERMINAL";
-                    subtitle: "terminal.session";
-                    accent: BlobTheme.terminal;
-                    body: "$ validated demo slice\n" + root.execution-output;
-                    footer: "execution evidence from the existing MVP slice";
-                }
-                SurfaceTile {
-                    horizontal-stretch: 3;
-                    title: "TESTS";
-                    subtitle: root.task-status;
-                    accent: BlobTheme.success;
-                    body: root.binding-summary + "\n\n" + root.verifier-summary;
-                    footer: "implementation and node remain binding details, not Workspace identity";
+                HorizontalLayout {
+                    spacing: BlobTheme.space-4;
+                    alignment: center;
+                    BlobAvatar { name: "Romeo"; role: "DEV"; status: root.task-status == "Completed" ? "tests ✓" : root.task-status; accessory: "helmet"; blob-color: BlobTheme.dev; focused: root.focused-workspace == 0; activated => { root.activate-workspace(0); } }
+                    BlobAvatar { name: "Docs"; role: "DOCS"; status: "context ready"; accessory: "glasses"; blob-color: BlobTheme.docs; focused: root.focused-workspace == 1; activated => { root.activate-workspace(1); } }
+                    BlobAvatar { name: "System"; role: "SYSTEM"; status: root.proposal-pending ? "proposal pending" : "healthy"; accessory: "wrench"; blob-color: BlobTheme.system; focused: root.focused-workspace == 2; activated => { root.activate-workspace(2); } }
+                    BlobAvatar { name: "Notes"; role: "NOTES"; status: "scratchpad"; accessory: "pencil"; blob-color: BlobTheme.notes; focused: root.focused-workspace == 3; activated => { root.activate-workspace(3); } }
                 }
             }
         }
 
-        if root.expanded-workspace == 1: HorizontalLayout {
-            spacing: BlobTheme.space-4;
+        if root.expanded-workspace < 0: Rectangle {
             vertical-stretch: 1;
-
-            SurfaceTile {
-                horizontal-stretch: 3;
-                title: "READER";
-                subtitle: "document.reader";
-                accent: BlobTheme.docs;
-                body: "The reading Surface will show content, annotations and semantic selections without requiring the user to think in terms of a PDF application.";
-                footer: "P0 Surface role · full reader deferred";
-            }
-            SurfaceTile {
-                horizontal-stretch: 2;
-                title: "RELATED";
-                subtitle: "document.related";
-                accent: BlobTheme.accent-secondary;
-                body: "References, notes and related objects can become contextual actions. This area is intentionally structural in P0.";
-                footer: "SemanticSelection comes in P1";
+            background: BlobTheme.canvas;
+            VerticalLayout {
+                alignment: center;
+                spacing: BlobTheme.space-3;
+                Text { text: "select a workspace to unfold its semantic surfaces"; color: BlobTheme.text-muted; font-size: 10px; horizontal-alignment: center; }
+                Text { text: "click blob :: 1..4 focus :: cmd+t unfold :: ? explain"; color: BlobTheme.text-faint; font-size: 9px; horizontal-alignment: center; }
             }
         }
 
-        if root.expanded-workspace == 2: VerticalLayout {
-            spacing: BlobTheme.space-4;
+        if root.expanded-workspace >= 0: VerticalLayout {
             vertical-stretch: 1;
+            spacing: 0px;
 
-            HorizontalLayout {
-                spacing: BlobTheme.space-4;
-                vertical-stretch: 1;
-
-                SurfaceTile {
-                    horizontal-stretch: 1;
-                    title: "HEALTH";
-                    subtitle: "system.health";
-                    accent: BlobTheme.system;
-                    body: "System healthy\n\n" + root.pipewire-label + "\n" + root.printing-label;
-                    footer: "System state is semantic, not a settings-page mock";
+            Rectangle {
+                height: 34px;
+                background: #080b0e;
+                border-color: BlobTheme.border;
+                border-width: 1px;
+                HorizontalLayout {
+                    padding-left: BlobTheme.space-3;
+                    padding-right: BlobTheme.space-3;
+                    spacing: BlobTheme.space-3;
+                    Text {
+                        text: root.expanded-workspace == 0 ? "[1] ROMEO" : root.expanded-workspace == 1 ? "[2] DOCS" : root.expanded-workspace == 2 ? "[3] SYSTEM" : "[4] NOTES";
+                        color: root.expanded-workspace == 0 ? BlobTheme.dev : root.expanded-workspace == 1 ? BlobTheme.docs : root.expanded-workspace == 2 ? BlobTheme.system : BlobTheme.notes;
+                        font-size: 10px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                    Text { text: ":: semantic surfaces :: placement=local :: instance=slint"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    Text { text: "[why]"; color: why-touch.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 9px; vertical-alignment: center; why-touch := TouchArea { mouse-cursor: pointer; clicked => { root.explain-current(); } } }
+                    Text { text: "[details]"; color: details-touch.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 9px; vertical-alignment: center; details-touch := TouchArea { mouse-cursor: pointer; clicked => { root.show-details(); } } }
+                    Text { text: "[collapse]"; color: collapse-touch.has-hover ? BlobTheme.warning : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; collapse-touch := TouchArea { mouse-cursor: pointer; clicked => { root.collapse-workspaces(); } } }
                 }
+            }
 
+            if root.expanded-workspace == 0: VerticalLayout {
+                padding: 8px;
+                spacing: 8px;
+                vertical-stretch: 1;
+                HorizontalLayout {
+                    spacing: 8px;
+                    vertical-stretch: 1;
+                    SurfaceTile {
+                        horizontal-stretch: 1;
+                        title: "EDITOR";
+                        subtitle: "~/src/blob/shell/main.rs   243:1   Rust";
+                        accent: BlobTheme.dev;
+                        gutter: "236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246";
+                        body: "semantic intent pipeline\n  resolve current context\n  validate requirement graph\n  prepare binding plan\n  verify authority boundary\n\nworkspace state remains persistent\nsurface implementation stays replaceable";
+                        footer: "surface=romeo/editor :: " + root.situation-summary;
+                    }
+                    SurfaceTile {
+                        horizontal-stretch: 1;
+                        title: "DOCS";
+                        subtitle: "~/docs/blobsh.md   markdown";
+                        accent: BlobTheme.docs;
+                        gutter: "1\n2\n3\n4\n5\n6\n7\n8\n9";
+                        body: "# blobsh — The Blob Shell\n\nThe native semantic shell of The Blob.\n\n## Goals\n- minimal and composable\n- Unix-like clarity\n- Workspace-first interaction\n\n## Quickstart";
+                        footer: "same Workspace :: docs.context";
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    vertical-stretch: 1;
+                    SurfaceTile {
+                        horizontal-stretch: 1;
+                        title: "TERMINAL";
+                        subtitle: "blobterm";
+                        accent: BlobTheme.terminal;
+                        body: "blob@local ~\nstatus: ready\nworkspace: romeo\nfabric: local/1\nsurface-host: slint\n\nvalidated demo slice\n" + root.execution-output;
+                        footer: "terminal.session :: execution evidence";
+                    }
+                    SurfaceTile {
+                        horizontal-stretch: 1;
+                        title: "TESTS";
+                        subtitle: root.task-status + " :: watching";
+                        accent: BlobTheme.success;
+                        body: "semantic checks\n\n" + root.binding-summary + "\n\n" + root.verifier-summary + "\n\nresult: ok";
+                        footer: "binding and placement remain inspectable";
+                    }
+                }
+            }
+
+            if root.expanded-workspace == 1: HorizontalLayout {
+                padding: 8px;
+                spacing: 8px;
+                vertical-stretch: 1;
+                SurfaceTile { horizontal-stretch: 3; title: "READER"; subtitle: "document.reader"; accent: BlobTheme.docs; gutter: "1\n2\n3\n4\n5\n6\n7\n8"; body: "# active document\n\nContent, annotations and semantic selections belong to the Docs Workspace.\n\nThe reader Surface remains independent of whichever implementation renders it."; footer: "P0 semantic reader"; }
+                SurfaceTile { horizontal-stretch: 2; title: "RELATED"; subtitle: "document.related"; accent: BlobTheme.accent-secondary; body: "references\nannotations\nbookmarks\nlinked Workspace objects\n\nSemanticSelection arrives in P1."; footer: "contextual actions, not app menus"; }
+            }
+
+            if root.expanded-workspace == 2: HorizontalLayout {
+                padding: 8px;
+                spacing: 8px;
+                vertical-stretch: 1;
+                SurfaceTile { horizontal-stretch: 1; title: "HEALTH"; subtitle: "system.health"; accent: BlobTheme.system; body: "status: healthy\n\n" + root.pipewire-label + "\n" + root.printing-label + "\n" + root.bluetooth-label; footer: "semantic System state"; }
                 Rectangle {
                     horizontal-stretch: 1;
                     background: BlobTheme.surface;
                     border-color: root.proposal-pending ? BlobTheme.warning : BlobTheme.border;
                     border-width: 1px;
-                    border-radius: BlobTheme.radius-lg;
-
+                    border-radius: 2px;
                     VerticalLayout {
-                        padding: BlobTheme.space-5;
-                        spacing: BlobTheme.space-4;
-
-                        HorizontalLayout {
-                            Text {
-                                text: "CONTROLS";
-                                color: BlobTheme.text;
-                                font-size: 13px;
-                                font-weight: 600;
-                            }
-                            Rectangle { horizontal-stretch: 1; background: transparent; }
-                            BlobStatus {
-                                label: root.bluetooth-enabled ? "ON" : "OFF";
-                                positive: root.bluetooth-enabled;
-                            }
-                        }
-
-                        Text {
-                            text: "Bluetooth";
-                            color: BlobTheme.text;
-                            font-size: 18px;
-                            font-weight: 600;
-                        }
-                        Text {
-                            text: root.bluetooth-label;
-                            color: BlobTheme.text-muted;
-                            font-size: 11px;
-                        }
-
-                        BlobAction {
-                            label: root.proposal-pending ? "Proposal prepared" : "Enable Bluetooth";
-                            clicked => {
-                                if (!root.proposal-pending) { root.system-propose-bluetooth(); }
-                            }
-                        }
-
-                        if root.proposal-pending: Rectangle {
-                            vertical-stretch: 1;
-                            background: BlobTheme.canvas;
-                            border-color: BlobTheme.warning;
+                        spacing: 0px;
+                        Rectangle {
+                            height: 27px;
+                            background: #080b0e;
+                            border-color: BlobTheme.border-soft;
                             border-width: 1px;
-                            border-radius: BlobTheme.radius-md;
-                            VerticalLayout {
-                                padding: BlobTheme.space-4;
-                                spacing: BlobTheme.space-2;
-                                Text { text: root.proposal-title; color: BlobTheme.warning; font-size: 11px; font-weight: 600; }
-                                Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: 10px; wrap: word-wrap; }
-                                Text { text: root.proposal-diff; color: BlobTheme.system; font-size: 10px; wrap: word-wrap; }
-                                Text { text: "Baseline remains OFF until backend + authority complete."; color: BlobTheme.text-faint; font-size: 9px; wrap: word-wrap; }
+                            HorizontalLayout {
+                                padding-left: BlobTheme.space-3;
+                                padding-right: BlobTheme.space-3;
+                                Text { text: "CONTROLS"; color: BlobTheme.system; font-size: 10px; font-weight: 600; vertical-alignment: center; }
+                                Rectangle { horizontal-stretch: 1; background: transparent; }
+                                BlobStatus { label: root.bluetooth-enabled ? "ON" : "OFF"; positive: root.bluetooth-enabled; }
                             }
                         }
-
-                        if root.proposal-pending: BlobAction {
-                            label: "Clear proposal";
-                            clicked => { root.system-clear-proposal(); }
+                        VerticalLayout {
+                            padding: BlobTheme.space-4;
+                            spacing: BlobTheme.space-3;
+                            Text { text: "bluetooth"; color: BlobTheme.text; font-size: 14px; font-weight: 600; }
+                            Text { text: root.bluetooth-label; color: BlobTheme.text-muted; font-size: 10px; }
+                            BlobAction { label: root.proposal-pending ? "proposal prepared" : "enable bluetooth"; clicked => { if (!root.proposal-pending) { root.system-propose-bluetooth(); } } }
+                            if root.proposal-pending: Rectangle {
+                                vertical-stretch: 1;
+                                background: #0b0e11;
+                                border-color: BlobTheme.warning;
+                                border-width: 1px;
+                                border-radius: 2px;
+                                VerticalLayout {
+                                    padding: BlobTheme.space-3;
+                                    spacing: BlobTheme.space-2;
+                                    Text { text: root.proposal-title; color: BlobTheme.warning; font-size: 10px; font-weight: 600; }
+                                    Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: 9px; wrap: word-wrap; }
+                                    Text { text: root.proposal-diff; color: BlobTheme.system; font-size: 9px; wrap: word-wrap; }
+                                    Text { text: "baseline stays OFF until backend + authority complete"; color: BlobTheme.text-faint; font-size: 8px; wrap: word-wrap; }
+                                }
+                            }
+                            if root.proposal-pending: BlobAction { label: "clear proposal"; clicked => { root.system-clear-proposal(); } }
                         }
                     }
                 }
             }
-        }
 
-        if root.expanded-workspace == 3: HorizontalLayout {
-            spacing: BlobTheme.space-4;
-            vertical-stretch: 1;
-
-            SurfaceTile {
-                horizontal-stretch: 2;
-                title: "SCRATCHPAD";
-                subtitle: "notes.scratchpad";
-                accent: BlobTheme.notes;
-                body: "> capture an idea here\n\nNotes will become a low-friction semantic Surface rather than a mandatory standalone notes application.";
-                footer: "editing comes after the shell grammar is validated";
-            }
-            SurfaceTile {
-                horizontal-stretch: 1;
-                title: "TODO";
-                subtitle: "notes.tasks";
-                accent: BlobTheme.accent-secondary;
-                body: "• review Blob Shell\n• test tile layout\n• keep P0 small";
-                footer: "P0 structural preview";
+            if root.expanded-workspace == 3: HorizontalLayout {
+                padding: 8px;
+                spacing: 8px;
+                vertical-stretch: 1;
+                SurfaceTile { horizontal-stretch: 2; title: "SCRATCHPAD"; subtitle: "notes.scratchpad"; accent: BlobTheme.notes; gutter: "1\n2\n3\n4\n5\n6"; body: "# scratchpad\n\n> capture an idea here\n\nNotes becomes a low-friction semantic Surface rather than a mandatory standalone notes application."; footer: "editing arrives after shell grammar validation"; }
+                SurfaceTile { horizontal-stretch: 1; title: "TODO"; subtitle: "notes.tasks"; accent: BlobTheme.accent-secondary; body: "[ ] review Blob Shell\n[x] terminal pane visual grammar\n[ ] test keyboard flow\n[ ] keep P0 small"; footer: "P0 structural preview"; }
             }
         }
     }
