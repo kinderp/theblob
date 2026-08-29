@@ -1,10 +1,14 @@
-# Graphics and Experience Model v0.1
+# Graphics and Experience Model v0.2
 
 **Status:** accepted design direction.
 
+Canonical shell details live in [`BLOB-SHELL-v0.1.md`](./BLOB-SHELL-v0.1.md). The terminology decisions are recorded in ADR 0001–0003 under `docs/adr/`.
+
 ## Goal
 
-The Blob must feel like one computer across devices without forcing every device to look identical. The logical experience is portable; the renderer may be Blob-native or platform-native.
+The Blob must feel like one computer across devices without forcing every device to look identical. The logical experience is portable; concrete SurfaceInstances and renderers may be Blob-native or platform-native.
+
+The user should experience a semantic operating environment rather than a dashboard application.
 
 ## Model
 
@@ -13,74 +17,123 @@ Personal World
      |
 Workspace
      |
-Task / Context
-     |
 Experience Grammar
      |
-Surface Model
+Surface(s)
+     |
+SurfaceInstance(s)
      |
 Experience Profile
      |
-Renderer
+SurfaceHost / Renderer
      |
 Platform graphics/windowing stack
 ```
 
 ### Experience Grammar
 
-Stable interaction semantics for a Workspace: navigation placement, main content roles, contextual panels, command model, keyboard/gesture policy, density and persistent interaction preferences.
+Stable interaction semantics for a Workspace: navigation/focus model, Surface roles, contextual actions, command model, keyboard/gesture policy, density rules and persistent interaction preferences.
 
-### Surface Model
+### Surface
 
-Typed semantic description of what should be presented on the current device/context. It contains roles such as `Editor`, `ObjectNavigator`, `TechnicianPanel`, `TaskStatus`, `Timeline`, `ComparisonPanel` rather than pixel coordinates.
+Persistent typed interactive role inside a Workspace. Examples include `Editor`, `ObjectNavigator`, `Docs`, `Terminal`, `Tests`, `SystemHealth`, `TaskStatus`, `Timeline` and `Comparison`.
+
+A Surface is semantic and device-independent. It may exist with no visible instance and may have multiple simultaneous instances.
+
+### SurfaceInstance
+
+Concrete manifestation of a Surface on one SurfaceHost/device/context.
+
+An instance may own local presentation state such as bounds, compact/rich profile and panel expansion while sharing semantic Surface state with other instances.
+
+The term `Projection` is reserved for its existing Blob meaning: a typed semantic selection over an object/resource.
 
 ### Experience Profile
 
-Determines how that semantic Surface is presented on a platform/device.
+Determines how a SurfaceInstance is presented and interacted with on a platform/device/context.
 
 Examples:
 
 ```text
-Development Workspace
+Romeo / Editor Surface
     + macos-native
-    + MacBook
+    + MacBook instance
 
-Development Workspace
-    + hyprland
-    + Linux desktop
+Romeo / Editor Surface
+    + hyprland-keyboard-first
+    + Linux desktop instance
 
-Writing Workspace
-    + blob-native
-    + either platform
+Docs Surface
+    + blob-native-compact
+    + tablet instance
 ```
 
-## Renderer families
+## Blob Shell as semantic compositor
+
+The Blob Shell owns semantic composition:
+
+- focused Workspace;
+- which Surfaces should have instances;
+- logical Workspace layout;
+- SemanticSelection and contextual action routing;
+- prompt/Intent integration;
+- Fabric/presence summary.
+
+It does not need to own low-level platform compositing.
+
+```text
+Blob Shell
+     |
+SurfaceHost / Layout Engine
+     |
+Slint/winit, Hyprland/Wayland, macOS, Android, ...
+```
+
+This allows the product interaction model to be proven before building a custom compositor.
+
+## Blob-native shell grammar
+
+The first Blob-native profile targets a semi-graphical CLI/TUI visual language:
+
+- compact persistent top status bar;
+- playful Workspace Blob avatars;
+- Blob mode <-> Tile mode;
+- tiling-friendly Surface composition;
+- bottom/global semantic prompt;
+- keyboard-first interaction;
+- contextual Technician, not a permanent chatbot panel.
+
+The same structured Intent layer should be reachable from GUI actions, shortcuts, prompt requests and drag/drop.
+
+## Renderer / SurfaceHost families
 
 ### Blob Native
 
-Initial renderer: **Slint**.
+Initial implementation: **Slint**.
 
-Purpose: coherent Blob visual identity across supported platforms, especially for Blob Shell, Workspace Builder, System Technician, Object Browser, Timeline, settings, command palette and native Blob components.
+Purpose: coherent Blob visual identity across supported platforms, especially for Blob Shell, Workspace construction, System Technician manifestations, Object Browser, Timeline, settings and native Blob Surfaces.
+
+Slint is a renderer/host choice, not semantic authority.
 
 ### macOS Native
 
-Potential renderer: SwiftUI/AppKit plus macOS-native windowing and platform integrations.
+Potential SurfaceHost/renderer: SwiftUI/AppKit plus macOS-native windowing and integrations.
 
 Goals:
 
-- native menu/shortcut conventions;
+- native menu/shortcut conventions where useful;
 - native gestures and window management;
-- notifications, drag-and-drop and system integration;
-- preserve Blob semantics/state underneath.
+- notifications, drag/drop and system integration;
+- preserve Blob Workspace/Surface semantics underneath.
 
 ### Linux / Hyprland
 
-Initial Linux stack:
+Initial Linux integration target:
 
 ```text
-Blob Workspace/Surface Engine
+Blob semantic Shell / Workspace model
         |
-Blob UI components (Slint where appropriate)
+SurfaceHost + Blob UI components
         |
 Hyprland integration
         |
@@ -89,25 +142,25 @@ Wayland
 Mesa / DRM / KMS / Linux drivers
 ```
 
-Hyprland is a first-class **Experience Profile/integration target**, not a permanent architectural dependency.
+Hyprland is a first-class Experience integration target, not a permanent architectural dependency.
 
 Longer-term option:
 
 ```text
-Blob Surface Engine
+Blob semantic Shell
        |
-Blob Shell
+Blob SurfaceHost
        |
 Blob compositor (Rust + Smithay)
        |
 Wayland / DRM / KMS
 ```
 
-This becomes worthwhile only if semantic Surface management requires compositor-level control that Hyprland cannot provide cleanly.
+This becomes worthwhile only if semantic Surface management requires compositor-level control that existing integrations cannot provide cleanly. A custom compositor is explicitly not required for the first shell demo.
 
 ### Android Native
 
-A future renderer may use Android-native UI APIs for phone/tablet surfaces while consuming the same semantic Surface Model.
+A future host may use Android-native UI APIs for phone/tablet SurfaceInstances while consuming the same semantic Surface model.
 
 ## Stable experience vs generative adaptation
 
@@ -118,10 +171,12 @@ stable Experience Grammar
           +
 versioned Experience Profile
           +
-contextual temporary Surfaces
+contextual temporary SurfaceInstances
 ```
 
-AI may propose or instantiate contextual panels and layouts inside declared schema boundaries, but stable shortcuts/layout grammar change only through explicit/authorized Workspace evolution.
+AI may propose or instantiate contextual panels/layouts inside declared schema boundaries, but stable shortcuts/layout grammar change only through explicit/authorized Workspace evolution.
+
+The user remains free to rearrange and override generated layouts.
 
 ## Ready / AI Designed / Expert
 
@@ -131,33 +186,61 @@ Experience Profiles participate in all three Workspace construction modes.
 
 Choose a curated combination such as:
 
-- Development / Blob Native Balanced
-- Development / Hyprland Keyboard-first
-- Development / macOS Native
+- Development / Blob Native Balanced;
+- Development / Hyprland Keyboard-first;
+- Development / macOS Native.
 
 ### AI Designed
 
-The Workspace Architect derives a profile from hardware, displays, input devices, habits and user priorities, then previews measurable trade-offs before committing it.
+The Workspace Architect derives a profile/layout from hardware, displays, input devices, habits and user priorities, then previews relevant trade-offs before adoption.
 
 ### Expert
 
-Users may directly control compositor/window model, renderer, layout grammar, animation policy, keyboard/gesture conventions, density, rendering priorities, Surface placement and legacy-window behavior.
+Users may directly control renderer/integration, layout grammar, animation policy, keyboard/gesture conventions, density, rendering priorities, SurfaceInstance placement and legacy-window behavior.
+
+These modes may be mixed by domain; they are not permanent user skill levels.
 
 ## Legacy applications
 
-Existing applications remain supported.
+Existing applications remain first-class compatibility citizens.
 
-On Linux, Wayland/XWayland clients can appear as `LegacySurface` elements in a Blob Workspace. On macOS, native applications such as Xcode or Safari can be associated with a Blob Workspace as native/legacy Surface providers.
+The shell recognizes increasing levels of integration:
 
-The Blob must not require the software ecosystem to be rewritten before the new interaction model is useful.
+1. **Legacy window** — complete application managed as a placement unit;
+2. **Hosted Surface** — application/window associated with a semantic Surface role;
+3. **Semantic adapter** — application exposes useful state/capabilities to the Blob;
+4. **Blob-native Surface** — role is rendered directly without exposing a traditional application.
 
-## Core invariant
+On Linux, Wayland/XWayland clients can therefore participate without being rewritten. On macOS, native applications can be associated with Workspaces/Surfaces while keeping their native UI.
+
+The user may request the full traditional application whenever technically possible.
+
+## Multi-device experience
+
+A Workspace is logically independent from a physical device but does not need to be distributed.
+
+SurfaceInstance placement, execution placement, data placement and current interaction presence are separate dimensions. A Workspace may be local, handed off to another interaction device, or selectively distributed when this is useful or explicitly requested.
+
+The Fabric must always make significant placement inspectable and overridable.
+
+## Core invariants
 
 ```text
 same Workspace semantics
-+ same Personal World state
 + same Tasks/Capabilities
++ same persistent Surface roles
+!= same SurfaceInstances
 != same pixels
 ```
 
-The Blob synchronizes meaning and state, not screenshots.
+and:
+
+```text
+Workspace != application
+Workspace != window
+Surface != SurfaceInstance
+SurfaceInstance placement != execution placement
+renderer != authority
+```
+
+The Blob synchronizes meaning and state, not screenshots, whenever a semantic Surface path is available.
