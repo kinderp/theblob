@@ -16,9 +16,10 @@ export component BlobAvatar inherits Rectangle {
     background: transparent;
 
     // Low-frequency motion only. This uses simple property animation rather
-    // than a continuously rendered 3D scene.
+    // than a continuously rendered 3D scene. Long intervals keep redraw duty
+    // cycle low while preserving a visible sense of life.
     Timer {
-        interval: root.accessory == "helmet" ? 2200ms : root.accessory == "glasses" ? 2600ms : root.accessory == "wrench" ? 2400ms : 2800ms;
+        interval: root.accessory == "helmet" ? 5200ms : root.accessory == "glasses" ? 6000ms : root.accessory == "wrench" ? 5600ms : 6400ms;
         running: true;
         triggered() => { root.idle-up = !root.idle-up; }
     }
@@ -37,11 +38,11 @@ export component BlobAvatar inherits Rectangle {
 
     character := Rectangle {
         x: 4px;
-        y: touch.has-hover ? -2px : (root.idle-up ? 5px : 13px);
+        y: touch.has-hover ? -2px : (root.idle-up ? 7px : 12px);
         width: 216px;
         height: 200px;
         background: transparent;
-        animate y { duration: touch.has-hover ? 170ms : 1050ms; easing: ease-in-out; }
+        animate y { duration: touch.has-hover ? 170ms : 650ms; easing: ease-in-out; }
 
         // Ground shadow separates the character from the flat Shell surface.
         Rectangle {
