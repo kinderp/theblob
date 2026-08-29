@@ -45,10 +45,10 @@ export component BlobShell inherits Window {
     height: 900px;
     background: BlobTheme.canvas;
 
-    // Use the platform's native generic monospace family by default. On each
-    // host this resolves to a familiar coding/terminal face without bundling a
-    // decorative font or making typography part of the P0 experiment.
-    default-font-family: "monospace";
+    // Experimental Arch/terminal-like P0 typography. SF Mono gives the macOS
+    // demo a dense coding face; hosts without it may fall back at runtime.
+    // This is intentionally a reversible visual experiment, not a font engine.
+    default-font-family: "SF Mono";
     default-font-size: 12px;
     default-font-weight: 400;
 
@@ -64,27 +64,27 @@ export component BlobShell inherits Window {
             HorizontalLayout {
                 padding-left: BlobTheme.space-4;
                 padding-right: BlobTheme.space-4;
-                spacing: BlobTheme.space-4;
+                spacing: BlobTheme.space-3;
 
                 Text {
-                    text: "blob@os";
+                    text: "blob@local";
                     color: BlobTheme.accent;
-                    font-size: 12px;
+                    font-size: 11px;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
 
                 Text {
-                    text: "|  1 Romeo  2 Docs  3 System  4 Notes";
+                    text: ":: ws [1:romeo 2:docs 3:system 4:notes]";
                     color: BlobTheme.text-muted;
-                    font-size: 11px;
+                    font-size: 10px;
                     vertical-alignment: center;
                 }
 
                 Rectangle { horizontal-stretch: 1; background: transparent; }
 
                 Text {
-                    text: "fabric:1  |  local host  |  P0";
+                    text: "fabric/1 :: local :: p0";
                     color: BlobTheme.text-faint;
                     font-size: 10px;
                     vertical-alignment: center;
@@ -143,14 +143,14 @@ export component BlobShell inherits Window {
             border-width: 1px;
 
             HorizontalLayout {
-                padding-left: BlobTheme.space-5;
-                padding-right: BlobTheme.space-5;
+                padding-left: BlobTheme.space-4;
+                padding-right: BlobTheme.space-4;
                 spacing: BlobTheme.space-3;
 
                 Text {
-                    text: ">_";
+                    text: "λ";
                     color: BlobTheme.accent;
-                    font-size: 16px;
+                    font-size: 15px;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
@@ -160,7 +160,7 @@ export component BlobShell inherits Window {
                     text <=> root.prompt-text;
                     color: BlobTheme.text;
                     selection-background-color: BlobTheme.accent-soft;
-                    font-size: 13px;
+                    font-size: 12px;
                     single-line: true;
                     accepted => {
                         root.submit-prompt(root.prompt-text);
@@ -170,7 +170,7 @@ export component BlobShell inherits Window {
                 Text {
                     text: root.prompt-status;
                     color: BlobTheme.text-faint;
-                    font-size: 10px;
+                    font-size: 9px;
                     vertical-alignment: center;
                 }
             }
