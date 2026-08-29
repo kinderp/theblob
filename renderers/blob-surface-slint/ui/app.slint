@@ -45,6 +45,13 @@ export component BlobShell inherits Window {
     height: 900px;
     background: BlobTheme.canvas;
 
+    // Use the platform's native generic monospace family by default. On each
+    // host this resolves to a familiar coding/terminal face without bundling a
+    // decorative font or making typography part of the P0 experiment.
+    default-font-family: "monospace";
+    default-font-size: 12px;
+    default-font-weight: 400;
+
     VerticalLayout {
         spacing: 0px;
 
@@ -62,16 +69,14 @@ export component BlobShell inherits Window {
                 Text {
                     text: "blob@os";
                     color: BlobTheme.accent;
-                    font-family: "monospace";
-                    font-size: 13px;
-                    font-weight: 700;
+                    font-size: 12px;
+                    font-weight: 600;
                     vertical-alignment: center;
                 }
 
                 Text {
                     text: "|  1 Romeo  2 Docs  3 System  4 Notes";
                     color: BlobTheme.text-muted;
-                    font-family: "monospace";
                     font-size: 11px;
                     vertical-alignment: center;
                 }
@@ -81,7 +86,6 @@ export component BlobShell inherits Window {
                 Text {
                     text: "fabric:1  |  local host  |  P0";
                     color: BlobTheme.text-faint;
-                    font-family: "monospace";
                     font-size: 10px;
                     vertical-alignment: center;
                 }
@@ -117,7 +121,7 @@ export component BlobShell inherits Window {
             }
 
             if root.overlay-open: Rectangle {
-                background: #00000088;
+                background: #00000077;
 
                 ContextOverlay {
                     x: (parent.width - self.width) / 2;
@@ -146,9 +150,8 @@ export component BlobShell inherits Window {
                 Text {
                     text: ">_";
                     color: BlobTheme.accent;
-                    font-family: "monospace";
-                    font-size: 18px;
-                    font-weight: 700;
+                    font-size: 16px;
+                    font-weight: 600;
                     vertical-alignment: center;
                 }
 
@@ -157,8 +160,7 @@ export component BlobShell inherits Window {
                     text <=> root.prompt-text;
                     color: BlobTheme.text;
                     selection-background-color: BlobTheme.accent-soft;
-                    font-family: "monospace";
-                    font-size: 14px;
+                    font-size: 13px;
                     single-line: true;
                     accepted => {
                         root.submit-prompt(root.prompt-text);
@@ -168,7 +170,6 @@ export component BlobShell inherits Window {
                 Text {
                     text: root.prompt-status;
                     color: BlobTheme.text-faint;
-                    font-family: "monospace";
                     font-size: 10px;
                     vertical-alignment: center;
                 }
