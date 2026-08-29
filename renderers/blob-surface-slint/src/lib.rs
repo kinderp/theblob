@@ -5,9 +5,9 @@ use std::rc::Rc;
 
 use blob_core::{FeatureState, SystemSpec};
 use blob_mvp::VerticalSliceOutcome;
+use blob_surface_app::shell::BlobShellState;
 use blob_surface_app::{
-    PrimarySurface, SurfaceApplication, SurfaceEffect, SurfaceIntent, TechnicianEvidenceContext,
-    TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
+    TechnicianEvidenceContext, TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
 };
 use blob_system_workspace::{demo_baseline_system_spec, SystemWorkspaceProposal};
 
@@ -149,21 +149,11 @@ fn feature_label(spec: &SystemSpec, feature: &str, display_name: &str) -> String
     format!("{display_name} {state}")
 }
 
-fn page_index(page: PrimarySurface) -> i32 {
-    match page {
-        PrimarySurface::Now => 0,
-        PrimarySurface::CurrentWorkspace => 1,
-        PrimarySurface::History => 2,
-        PrimarySurface::Fabric => 3,
-        PrimarySurface::Inspector => 4,
-    }
-}
-
 fn projection_detail(projection: &TechnicianProjection) -> String {
     let mut lines = projection
         .details
         .iter()
-        .take(2)
+        .take(3)
         .cloned()
         .collect::<Vec<_>>();
     if let Some(next) = projection.next_steps.first() {
@@ -175,23 +165,44 @@ fn projection_detail(projection: &TechnicianProjection) -> String {
     lines.join("\n")
 }
 
-fn apply_effect(ui: &BlobShell, effect: SurfaceEffect, technician: &TechnicianProjectionSet) {
-    match effect {
-        SurfaceEffect::PageChanged(page) => ui.set_active_page(page_index(page)),
-        SurfaceEffect::TechnicianIntentRecorded(intent) => {
-            let projection = technician.for_intent(intent);
-            ui.set_technician_title(projection.title.clone().into());
-            ui.set_technician_body(projection.summary.clone().into());
-            ui.set_technician_detail(projection_detail(projection).into());
-            ui.set_technician_status(
-                format!(
-                    "Evidence-backed · required autonomy {:?} · no execution authority granted",
-                    projection.required_autonomy
-                )
-                .into(),
-            );
-        }
-    }
+fn show_projection(ui: &BlobShell, projection: &TechnicianProjection) {
+    ui.set_overlay_open(true);
+    ui.set_overlay_eyebrow("TECHNICIAN · EVIDENCE".into());
+    ui.set_overlay_title(projection.title.clone().into());
+    ui.set_overlay_body(projection.summary.clone().into());
+    ui.set_overlay_detail(projection_detail(projection).into());
+    ui.set_overlay_status(
+        format!(
+            "required autonomy {:?} · no execution authority granted",
+            projection.required_autonomy
+        )
+        .into(),
+    );
+}
+
+fn show_details(ui: &BlobShell, snapshot: &DevelopmentSurfaceSnapshot) {
+    ui.set_overlay_open(true);
+    ui.set_overlay_eyebrow("WHY? / DETAILS".into());
+    ui.set_overlay_title("Current semantic evidence".into());
+    ui.set_overlay_body(snapshot.binding_summary.clone().into());
+    ui.set_overlay_detail(
+        format!(
+            "Verifier: {}\nExecution: {}\n\nCausal history:\n{}",
+            snapshot.verifier_summary, snapshot.execution_output, snapshot.causal_summary
+        )
+        .into(),
+    );
+    ui.set_overlay_status("read-only inspection · renderer has no execution authority".into());
+}
+
+fn apply_shell_state(ui: &BlobShell, shell: &BlobShellState) {
+    ui.set_focused_workspace(shell.focused_workspace_index() as i32);
+    ui.set_expanded_workspace(
+        shell
+            .expanded_workspace_index()
+            .map(|index| index as i32)
+            .unwrap_or(-1),
+    );
 }
 
 fn apply_bluetooth_proposal(ui: &BlobShell, proposal: &SystemWorkspaceProposal) {
@@ -199,155 +210,154 @@ fn apply_bluetooth_proposal(ui: &BlobShell, proposal: &SystemWorkspaceProposal) 
     ui.set_system_proposal_title(proposal.title.clone().into());
     ui.set_system_proposal_summary(proposal.desired_outcome.clone().into());
     ui.set_system_proposal_diff(proposal.semantic_diff_lines().join(" · ").into());
-    ui.set_technician_title("Bluetooth change proposed".into());
-    ui.set_technician_body(
-        "The switch created a validated semantic SystemSpec proposal. Bluetooth is still off in the baseline because no backend or authority step has run."
+    ui.set_overlay_open(true);
+    ui.set_overlay_eyebrow("SYSTEM · PROPOSAL".into());
+    ui.set_overlay_title("Bluetooth change proposed".into());
+    ui.set_overlay_body(
+        "The control created a validated semantic SystemSpec proposal. Bluetooth is still off in the baseline because no backend or authority step has run."
             .into(),
     );
-    ui.set_technician_detail(
+    ui.set_overlay_detail(
         format!(
             "Semantic diff: {}\nNext boundary: deterministic backend translation and candidate verification.",
             proposal.semantic_diff_lines().join(" · ")
         )
         .into(),
     );
-    ui.set_technician_status(
-        "Proposal only · no raw Nix emitted by the UI · no activation authority granted".into(),
+    ui.set_overlay_status(
+        "proposal only · no raw Nix emitted by UI · no activation authority granted".into(),
     );
+}
+
+fn clear_system_proposal(ui: &BlobShell) {
+    ui.set_system_proposal_pending(false);
+    ui.set_system_proposal_title("".into());
+    ui.set_system_proposal_summary("".into());
+    ui.set_system_proposal_diff("".into());
+}
+
+fn execute_prompt(
+    ui: &BlobShell,
+    shell: &Rc<RefCell<BlobShellState>>,
+    technician: &TechnicianProjectionSet,
+    snapshot: &DevelopmentSurfaceSnapshot,
+    raw: &str,
+) {
+    let command = raw.trim().to_lowercase();
+    let set_status = |message: &str| ui.set_prompt_status(message.into());
+
+    match command.as_str() {
+        "romeo" | "dev" => {
+            shell.borrow_mut().toggle_single_workspace(0);
+            apply_shell_state(ui, &shell.borrow());
+            set_status("Romeo · Workspace intent");
+        }
+        "docs" => {
+            shell.borrow_mut().toggle_single_workspace(1);
+            apply_shell_state(ui, &shell.borrow());
+            set_status("Docs · Workspace intent");
+        }
+        "system" => {
+            shell.borrow_mut().toggle_single_workspace(2);
+            apply_shell_state(ui, &shell.borrow());
+            set_status("System · Workspace intent");
+        }
+        "notes" => {
+            shell.borrow_mut().toggle_single_workspace(3);
+            apply_shell_state(ui, &shell.borrow());
+            set_status("Notes · Workspace intent");
+        }
+        "bluetooth" | "enable bluetooth" => {
+            shell.borrow_mut().toggle_single_workspace(2);
+            apply_shell_state(ui, &shell.borrow());
+            let proposal = SystemWorkspaceProposal::bluetooth_demo();
+            apply_bluetooth_proposal(ui, &proposal);
+            set_status("Bluetooth · semantic proposal prepared");
+        }
+        "why" | "why?" | "explain" => {
+            show_projection(ui, technician.for_intent(TechnicianIntent::ExplainCurrent));
+            set_status("Technician · evidence-backed explanation");
+        }
+        "details" => {
+            show_details(ui, snapshot);
+            set_status("Inspector · semantic evidence");
+        }
+        "home" | "blob" => {
+            shell.borrow_mut().collapse_all();
+            apply_shell_state(ui, &shell.borrow());
+            set_status("Blob mode · four Workspaces");
+        }
+        "" => set_status("romeo · docs · system · notes · bluetooth · why"),
+        _ => set_status("unknown P0 intent · try romeo, docs, system, notes, bluetooth, why"),
+    }
+
+    ui.set_prompt_text("".into());
 }
 
 pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::PlatformError> {
     let ui = BlobShell::new()?;
-    ui.set_workspace_title(snapshot.workspace_title.clone().into());
     ui.set_situation_summary(snapshot.situation_summary.clone().into());
     ui.set_task_status(snapshot.task_status.clone().into());
     ui.set_binding_summary(snapshot.binding_summary.clone().into());
     ui.set_verifier_summary(snapshot.verifier_summary.clone().into());
     ui.set_execution_output(snapshot.execution_output.clone().into());
-    ui.set_causal_summary(snapshot.causal_summary.clone().into());
 
     let system = SystemWorkspaceSurfaceSnapshot::demo();
-    ui.set_system_workspace_title(system.title.clone().into());
-    ui.set_system_mode(system.mode.clone().into());
     ui.set_bluetooth_enabled(system.bluetooth_enabled);
     ui.set_bluetooth_label(system.bluetooth_label.clone().into());
     ui.set_pipewire_label(system.pipewire_label.clone().into());
     ui.set_printing_label(system.printing_label.clone().into());
 
-    let app = Rc::new(RefCell::new(SurfaceApplication::default()));
+    let shell = Rc::new(RefCell::new(BlobShellState::demo_local("surface-host:macos-p0")));
     let technician = Rc::new(snapshot.technician.clone());
-    ui.set_active_page(page_index(app.borrow().current()));
+    let snapshot = Rc::new(snapshot.clone());
+    apply_shell_state(&ui, &shell.borrow());
 
     {
         let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_navigate_now(move || {
-            let effect = app
-                .borrow_mut()
-                .apply(SurfaceIntent::Navigate(PrimarySurface::Now));
+        let shell = Rc::clone(&shell);
+        ui.on_activate_workspace(move |index| {
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
+                if let Ok(index) = usize::try_from(index) {
+                    shell.borrow_mut().toggle_single_workspace(index);
+                    apply_shell_state(&ui, &shell.borrow());
+                }
             }
         });
     }
     {
         let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_navigate_workspace(move || {
-            let effect = app
-                .borrow_mut()
-                .apply(SurfaceIntent::Navigate(PrimarySurface::CurrentWorkspace));
+        let shell = Rc::clone(&shell);
+        ui.on_collapse_workspaces(move || {
+            shell.borrow_mut().collapse_all();
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
+                apply_shell_state(&ui, &shell.borrow());
             }
         });
     }
     {
         let weak = ui.as_weak();
-        let app = Rc::clone(&app);
         let technician = Rc::clone(&technician);
-        ui.on_navigate_history(move || {
-            let effect = app
-                .borrow_mut()
-                .apply(SurfaceIntent::Navigate(PrimarySurface::History));
+        ui.on_explain_current(move || {
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
+                show_projection(&ui, technician.for_intent(TechnicianIntent::ExplainCurrent));
             }
         });
     }
     {
         let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_navigate_fabric(move || {
-            let effect = app
-                .borrow_mut()
-                .apply(SurfaceIntent::Navigate(PrimarySurface::Fabric));
+        let snapshot = Rc::clone(&snapshot);
+        ui.on_show_details(move || {
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
+                show_details(&ui, &snapshot);
             }
         });
     }
     {
         let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_open_inspector(move || {
-            let effect = app.borrow_mut().apply(SurfaceIntent::OpenInspector);
+        ui.on_close_overlay(move || {
             if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_close_inspector(move || {
-            let effect = app.borrow_mut().apply(SurfaceIntent::CloseInspector);
-            if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_technician_explain(move || {
-            let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
-                TechnicianIntent::ExplainCurrent,
-            ));
-            if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_technician_teach(move || {
-            let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
-                TechnicianIntent::TeachCurrent,
-            ));
-            if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
-            }
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let app = Rc::clone(&app);
-        let technician = Rc::clone(&technician);
-        ui.on_technician_prepare(move || {
-            let effect = app.borrow_mut().apply(SurfaceIntent::Technician(
-                TechnicianIntent::PrepareNextStep,
-            ));
-            if let Some(ui) = weak.upgrade() {
-                apply_effect(&ui, effect, &technician);
+                ui.set_overlay_open(false);
             }
         });
     }
@@ -364,10 +374,18 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
         let weak = ui.as_weak();
         ui.on_system_clear_proposal(move || {
             if let Some(ui) = weak.upgrade() {
-                ui.set_system_proposal_pending(false);
-                ui.set_system_proposal_title("".into());
-                ui.set_system_proposal_summary("".into());
-                ui.set_system_proposal_diff("".into());
+                clear_system_proposal(&ui);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let shell = Rc::clone(&shell);
+        let technician = Rc::clone(&technician);
+        let snapshot = Rc::clone(&snapshot);
+        ui.on_submit_prompt(move |command| {
+            if let Some(ui) = weak.upgrade() {
+                execute_prompt(&ui, &shell, &technician, &snapshot, command.as_str());
             }
         });
     }
@@ -398,5 +416,13 @@ mod tests {
             proposal.semantic_diff_lines(),
             vec!["feature:bluetooth: disabled -> enabled"]
         );
+    }
+
+    #[test]
+    fn shell_demo_exposes_four_renderer_neutral_workspaces() {
+        let shell = BlobShellState::demo_local("host:test");
+        assert_eq!(shell.workspaces.len(), 4);
+        assert_eq!(shell.workspaces[0].title, "Romeo");
+        assert_eq!(shell.workspaces[0].surface_instances.len(), 4);
     }
 }
