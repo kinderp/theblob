@@ -1,0 +1,177 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+export component BlobAvatar inherits Rectangle {
+    in property <string> name;
+    in property <string> role;
+    in property <string> status;
+    in property <string> accessory;
+    in property <color> blob-color;
+    in property <bool> focused: false;
+    callback activated;
+
+    width: 236px;
+    height: 246px;
+    background: transparent;
+
+    halo := Rectangle {
+        x: 12px;
+        y: 8px;
+        width: 212px;
+        height: 196px;
+        border-radius: 96px;
+        background: root.focused || touch.has-hover ? BlobTheme.glow-soft : transparent;
+        border-color: root.focused ? root.blob-color : transparent;
+        border-width: root.focused ? 1px : 0px;
+    }
+
+    // Organic silhouette. The independent lobes deliberately avoid an app-icon rectangle.
+    Rectangle {
+        x: 31px;
+        y: 48px;
+        width: 174px;
+        height: 142px;
+        border-radius: 70px;
+        background: root.blob-color;
+    }
+    Rectangle {
+        x: 16px;
+        y: 90px;
+        width: 70px;
+        height: 72px;
+        border-radius: 36px;
+        background: root.blob-color;
+    }
+    Rectangle {
+        x: 151px;
+        y: 93px;
+        width: 70px;
+        height: 70px;
+        border-radius: 35px;
+        background: root.blob-color;
+    }
+    Rectangle {
+        x: 50px;
+        y: 151px;
+        width: 49px;
+        height: 56px;
+        border-radius: 24px;
+        background: root.blob-color;
+    }
+    Rectangle {
+        x: 92px;
+        y: 158px;
+        width: 48px;
+        height: 54px;
+        border-radius: 24px;
+        background: root.blob-color;
+    }
+    Rectangle {
+        x: 133px;
+        y: 150px;
+        width: 49px;
+        height: 56px;
+        border-radius: 24px;
+        background: root.blob-color;
+    }
+
+    // Eyes and smile keep the compact Workspaces recognisable as characters.
+    Rectangle { x: 76px; y: 101px; width: 18px; height: 25px; border-radius: 9px; background: BlobTheme.ink; }
+    Rectangle { x: 142px; y: 101px; width: 18px; height: 25px; border-radius: 9px; background: BlobTheme.ink; }
+    Text {
+        x: 102px;
+        y: 124px;
+        width: 34px;
+        height: 28px;
+        text: "⌣";
+        color: BlobTheme.ink;
+        font-size: 25px;
+        horizontal-alignment: center;
+    }
+
+    if root.accessory == "helmet": Rectangle {
+        x: 59px;
+        y: 28px;
+        width: 118px;
+        height: 44px;
+        border-radius: 24px;
+        background: BlobTheme.helmet;
+        Rectangle { x: 49px; y: -9px; width: 20px; height: 53px; border-radius: 8px; background: BlobTheme.helmet-dark; }
+        Rectangle { x: -10px; y: 34px; width: 138px; height: 13px; border-radius: 6px; background: BlobTheme.helmet-dark; }
+    }
+
+    if root.accessory == "glasses": Rectangle {
+        x: 57px;
+        y: 91px;
+        width: 55px;
+        height: 44px;
+        border-radius: 16px;
+        background: #071218dd;
+        border-color: BlobTheme.docs;
+        border-width: 4px;
+        Rectangle {
+            x: 68px;
+            y: 0px;
+            width: 55px;
+            height: 44px;
+            border-radius: 16px;
+            background: #071218dd;
+            border-color: BlobTheme.docs;
+            border-width: 4px;
+        }
+        Rectangle { x: 54px; y: 18px; width: 18px; height: 5px; background: BlobTheme.docs; }
+    }
+
+    if root.accessory == "wrench": Text {
+        x: 154px;
+        y: 40px;
+        width: 60px;
+        height: 70px;
+        text: "⚙";
+        color: BlobTheme.system;
+        font-size: 44px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if root.accessory == "pencil": Text {
+        x: 154px;
+        y: 38px;
+        width: 64px;
+        height: 72px;
+        text: "✎";
+        color: BlobTheme.notes;
+        font-size: 46px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 16px;
+        y: 207px;
+        width: 204px;
+        height: 22px;
+        text: root.name;
+        color: root.focused ? BlobTheme.text : BlobTheme.text-muted;
+        font-family: "monospace";
+        font-size: 16px;
+        font-weight: 700;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        x: 16px;
+        y: 228px;
+        width: 204px;
+        height: 18px;
+        text: root.status == "" ? root.role : root.role + " · " + root.status;
+        color: BlobTheme.text-faint;
+        font-family: "monospace";
+        font-size: 10px;
+        horizontal-alignment: center;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
