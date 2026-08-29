@@ -1,0 +1,93 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+export component ContextOverlay inherits Rectangle {
+    in property <string> eyebrow: "TECHNICIAN";
+    in property <string> title;
+    in property <string> body;
+    in property <string> detail;
+    in property <string> status;
+    callback close;
+
+    width: 520px;
+    height: 330px;
+    background: BlobTheme.surface-raised;
+    border-color: BlobTheme.accent;
+    border-width: 1px;
+    border-radius: BlobTheme.radius-xl;
+
+    VerticalLayout {
+        padding: BlobTheme.space-6;
+        spacing: BlobTheme.space-4;
+
+        HorizontalLayout {
+            Text {
+                text: root.eyebrow;
+                color: BlobTheme.accent;
+                font-family: "monospace";
+                font-size: 11px;
+                font-weight: 700;
+            }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Rectangle {
+                width: 30px;
+                height: 30px;
+                border-radius: 15px;
+                background: close-touch.has-hover ? BlobTheme.surface-soft : transparent;
+                Text {
+                    text: "×";
+                    color: BlobTheme.text-muted;
+                    font-size: 20px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                close-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.close(); }
+                }
+            }
+        }
+
+        Text {
+            text: root.title;
+            color: BlobTheme.text;
+            font-family: "monospace";
+            font-size: 21px;
+            font-weight: 700;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.body;
+            color: BlobTheme.text-muted;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: BlobTheme.canvas;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-md;
+            Text {
+                x: BlobTheme.space-4;
+                y: BlobTheme.space-3;
+                width: parent.width - 2 * BlobTheme.space-4;
+                height: parent.height - 2 * BlobTheme.space-3;
+                text: root.detail;
+                color: BlobTheme.text-faint;
+                font-family: "monospace";
+                font-size: 10px;
+                wrap: word-wrap;
+            }
+        }
+
+        Text {
+            text: root.status;
+            color: BlobTheme.warning;
+            font-family: "monospace";
+            font-size: 10px;
+            wrap: word-wrap;
+        }
+    }
+}
