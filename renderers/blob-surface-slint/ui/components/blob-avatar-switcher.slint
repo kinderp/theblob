@@ -1,0 +1,50 @@
+import { BlobAvatar } from "blob-avatar.slint";
+import { PixelBlobAvatar } from "pixel-blob-avatar.slint";
+import { AsciiBlobAvatar } from "ascii-blob-avatar.slint";
+
+export component BlobAvatarSwitcher inherits Rectangle {
+    in property <string> style: "soft3d";
+    in property <string> name;
+    in property <string> role;
+    in property <string> status;
+    in property <string> accessory;
+    in property <color> blob-color;
+    in property <bool> focused: false;
+    callback activated;
+
+    width: 224px;
+    height: 250px;
+    background: transparent;
+
+    if root.style == "soft3d": BlobAvatar {
+        name: root.name;
+        role: root.role;
+        status: root.status;
+        accessory: root.accessory;
+        blob-color: root.blob-color;
+        focused: root.focused;
+        activated => { root.activated(); }
+    }
+
+    if root.style == "pixel": PixelBlobAvatar {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.name;
+        role: root.role;
+        status: root.status;
+        accessory: root.accessory;
+        blob-color: root.blob-color;
+        focused: root.focused;
+        activated => { root.activated(); }
+    }
+
+    if root.style == "ascii": AsciiBlobAvatar {
+        name: root.name;
+        role: root.role;
+        status: root.status;
+        accessory: root.accessory;
+        blob-color: root.blob-color;
+        focused: root.focused;
+        activated => { root.activated(); }
+    }
+}
