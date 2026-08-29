@@ -9,163 +9,232 @@ export component BlobAvatar inherits Rectangle {
     in property <bool> focused: false;
     callback activated;
 
-    width: 236px;
+    property <bool> idle-up: false;
+
+    width: 224px;
     height: 246px;
     background: transparent;
 
-    halo := Rectangle {
-        x: 12px;
-        y: 8px;
-        width: 212px;
-        height: 196px;
-        border-radius: 96px;
-        background: root.focused || touch.has-hover ? BlobTheme.glow-soft : transparent;
-        border-color: root.focused ? root.blob-color : transparent;
-        border-width: root.focused ? 1px : 0px;
-    }
-
-    // Organic silhouette. The independent lobes deliberately avoid an app-icon rectangle.
-    Rectangle {
-        x: 31px;
-        y: 48px;
-        width: 174px;
-        height: 142px;
-        border-radius: 70px;
-        background: root.blob-color;
-    }
-    Rectangle {
-        x: 16px;
-        y: 90px;
-        width: 70px;
-        height: 72px;
-        border-radius: 36px;
-        background: root.blob-color;
-    }
-    Rectangle {
-        x: 151px;
-        y: 93px;
-        width: 70px;
-        height: 70px;
-        border-radius: 35px;
-        background: root.blob-color;
-    }
-    Rectangle {
-        x: 50px;
-        y: 151px;
-        width: 49px;
-        height: 56px;
-        border-radius: 24px;
-        background: root.blob-color;
-    }
-    Rectangle {
-        x: 92px;
-        y: 158px;
-        width: 48px;
-        height: 54px;
-        border-radius: 24px;
-        background: root.blob-color;
-    }
-    Rectangle {
-        x: 133px;
-        y: 150px;
-        width: 49px;
-        height: 56px;
-        border-radius: 24px;
-        background: root.blob-color;
-    }
-
-    // Eyes and smile keep the compact Workspaces recognisable as characters.
-    Rectangle { x: 76px; y: 101px; width: 18px; height: 25px; border-radius: 9px; background: BlobTheme.ink; }
-    Rectangle { x: 142px; y: 101px; width: 18px; height: 25px; border-radius: 9px; background: BlobTheme.ink; }
-    Text {
-        x: 102px;
-        y: 124px;
-        width: 34px;
-        height: 28px;
-        text: "⌣";
-        color: BlobTheme.ink;
-        font-size: 25px;
-        horizontal-alignment: center;
-    }
-
-    if root.accessory == "helmet": Rectangle {
-        x: 59px;
-        y: 28px;
-        width: 118px;
-        height: 44px;
-        border-radius: 24px;
-        background: BlobTheme.helmet;
-        Rectangle { x: 49px; y: -9px; width: 20px; height: 53px; border-radius: 8px; background: BlobTheme.helmet-dark; }
-        Rectangle { x: -10px; y: 34px; width: 138px; height: 13px; border-radius: 6px; background: BlobTheme.helmet-dark; }
-    }
-
-    if root.accessory == "glasses": Rectangle {
-        x: 57px;
-        y: 91px;
-        width: 55px;
-        height: 44px;
-        border-radius: 16px;
-        background: #071218dd;
-        border-color: BlobTheme.docs;
-        border-width: 4px;
-        Rectangle {
-            x: 68px;
-            y: 0px;
-            width: 55px;
-            height: 44px;
-            border-radius: 16px;
-            background: #071218dd;
-            border-color: BlobTheme.docs;
-            border-width: 4px;
+    // Slow, deliberately non-continuous idle movement. Different roles use
+    // slightly different periods so the Workspace characters do not march in
+    // lockstep or turn the shell into an animated dashboard.
+    Timer {
+        interval: root.accessory == "helmet" ? 2700ms : root.accessory == "glasses" ? 3100ms : root.accessory == "wrench" ? 2900ms : 3300ms;
+        running: true;
+        triggered() => {
+            root.idle-up = !root.idle-up;
         }
-        Rectangle { x: 54px; y: 18px; width: 18px; height: 5px; background: BlobTheme.docs; }
     }
 
-    if root.accessory == "wrench": Text {
-        x: 154px;
-        y: 40px;
-        width: 60px;
-        height: 70px;
-        text: "⚙";
-        color: BlobTheme.system;
-        font-size: 44px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    halo := Rectangle {
+        x: 20px;
+        y: 16px;
+        width: 184px;
+        height: 184px;
+        border-radius: 92px;
+        background: touch.has-hover ? BlobTheme.glow-soft : transparent;
+        border-color: root.focused ? BlobTheme.border : transparent;
+        border-width: root.focused ? 1px : 0px;
+        animate background, border-color { duration: 160ms; }
     }
 
-    if root.accessory == "pencil": Text {
-        x: 154px;
-        y: 38px;
-        width: 64px;
-        height: 72px;
-        text: "✎";
-        color: BlobTheme.notes;
-        font-size: 46px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    character := Rectangle {
+        x: 4px;
+        y: touch.has-hover ? 3px : (root.idle-up ? 7px : 11px);
+        width: 216px;
+        height: 196px;
+        background: transparent;
+        animate y { duration: 900ms; easing: ease-in-out; }
+
+        // Soft shadow anchors the character while keeping the silhouette light.
+        Rectangle {
+            x: 55px;
+            y: 174px;
+            width: 108px;
+            height: 13px;
+            border-radius: 7px;
+            background: #00000038;
+        }
+
+        // Organic body: overlapping rounded masses instead of an icon/card.
+        Rectangle {
+            x: 30px;
+            y: 47px;
+            width: 158px;
+            height: 126px;
+            border-radius: 63px;
+            background: root.blob-color;
+        }
+        Rectangle {
+            x: 23px;
+            y: 82px;
+            width: 58px;
+            height: 72px;
+            border-radius: 29px;
+            background: root.blob-color;
+        }
+        Rectangle {
+            x: 139px;
+            y: 78px;
+            width: 59px;
+            height: 76px;
+            border-radius: 30px;
+            background: root.blob-color;
+        }
+        Rectangle {
+            x: 47px;
+            y: 30px;
+            width: 63px;
+            height: 66px;
+            border-radius: 32px;
+            background: root.blob-color;
+        }
+        Rectangle {
+            x: 101px;
+            y: 34px;
+            width: 66px;
+            height: 62px;
+            border-radius: 31px;
+            background: root.blob-color;
+        }
+
+        // Three little feet make the Blob feel like a character rather than a logo.
+        Rectangle { x: 49px; y: 145px; width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; }
+        Rectangle { x: 88px; y: 151px; width: 42px; height: 39px; border-radius: 21px; background: root.blob-color; }
+        Rectangle { x: 126px; y: 145px; width: 43px; height: 44px; border-radius: 22px; background: root.blob-color; }
+
+        // Friendly face. White eyes improve expression on muted Blob colours;
+        // pupils react subtly to hover so the character acknowledges the user.
+        left-eye := Rectangle {
+            x: 68px;
+            y: 91px;
+            width: 27px;
+            height: touch.has-hover ? 31px : 29px;
+            border-radius: 14px;
+            background: BlobTheme.eye;
+            animate height { duration: 120ms; }
+            Rectangle {
+                x: touch.has-hover ? 10px : 8px;
+                y: 10px;
+                width: 9px;
+                height: 12px;
+                border-radius: 5px;
+                background: BlobTheme.ink;
+                animate x { duration: 120ms; }
+            }
+        }
+        right-eye := Rectangle {
+            x: 124px;
+            y: 91px;
+            width: 27px;
+            height: touch.has-hover ? 31px : 29px;
+            border-radius: 14px;
+            background: BlobTheme.eye;
+            animate height { duration: 120ms; }
+            Rectangle {
+                x: touch.has-hover ? 8px : 10px;
+                y: 10px;
+                width: 9px;
+                height: 12px;
+                border-radius: 5px;
+                background: BlobTheme.ink;
+                animate x { duration: 120ms; }
+            }
+        }
+
+        Rectangle { x: 54px; y: 125px; width: 17px; height: 8px; border-radius: 4px; background: BlobTheme.cheek; }
+        Rectangle { x: 148px; y: 125px; width: 17px; height: 8px; border-radius: 4px; background: BlobTheme.cheek; }
+
+        Text {
+            x: 91px;
+            y: 118px;
+            width: 38px;
+            height: 27px;
+            text: touch.has-hover ? "⌣" : "◡";
+            color: BlobTheme.ink;
+            font-size: touch.has-hover ? 25px : 23px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            animate font-size { duration: 120ms; }
+        }
+
+        if root.accessory == "helmet": Rectangle {
+            x: 55px;
+            y: 18px;
+            width: 110px;
+            height: 39px;
+            border-radius: 20px;
+            background: BlobTheme.helmet;
+            Rectangle { x: 46px; y: -7px; width: 18px; height: 46px; border-radius: 7px; background: BlobTheme.helmet-dark; }
+            Rectangle { x: -9px; y: 31px; width: 128px; height: 11px; border-radius: 6px; background: BlobTheme.helmet-dark; }
+        }
+
+        if root.accessory == "glasses": Rectangle {
+            x: 55px;
+            y: 88px;
+            width: 53px;
+            height: 38px;
+            border-radius: 15px;
+            background: #111318cc;
+            border-color: BlobTheme.docs;
+            border-width: 3px;
+            Rectangle {
+                x: 57px;
+                y: 0px;
+                width: 53px;
+                height: 38px;
+                border-radius: 15px;
+                background: #111318cc;
+                border-color: BlobTheme.docs;
+                border-width: 3px;
+            }
+            Rectangle { x: 48px; y: 16px; width: 12px; height: 4px; background: BlobTheme.docs; }
+        }
+
+        if root.accessory == "wrench": Text {
+            x: 151px;
+            y: 27px;
+            width: 48px;
+            height: 57px;
+            text: "⚙";
+            color: BlobTheme.system;
+            font-size: 38px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        if root.accessory == "pencil": Text {
+            x: 151px;
+            y: 27px;
+            width: 50px;
+            height: 58px;
+            text: "✎";
+            color: BlobTheme.notes;
+            font-size: 39px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
 
     Text {
-        x: 16px;
+        x: 14px;
         y: 207px;
-        width: 204px;
+        width: 196px;
         height: 22px;
         text: root.name;
         color: root.focused ? BlobTheme.text : BlobTheme.text-muted;
-        font-family: "monospace";
-        font-size: 16px;
-        font-weight: 700;
+        font-size: 15px;
+        font-weight: root.focused ? 600 : 500;
         horizontal-alignment: center;
     }
 
     Text {
-        x: 16px;
+        x: 14px;
         y: 228px;
-        width: 204px;
+        width: 196px;
         height: 18px;
         text: root.status == "" ? root.role : root.role + " · " + root.status;
         color: BlobTheme.text-faint;
-        font-family: "monospace";
         font-size: 10px;
         horizontal-alignment: center;
     }
