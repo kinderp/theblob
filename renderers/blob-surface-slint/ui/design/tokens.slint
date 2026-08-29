@@ -1,33 +1,41 @@
 export global BlobTheme {
-    in-out property <color> canvas: #05080d;
-    in-out property <color> surface: #0a1118;
-    in-out property <color> surface-raised: #101a24;
-    in-out property <color> surface-soft: #0d151e;
-    in-out property <color> border: #233240;
-    in-out property <color> border-soft: #18242f;
-    in-out property <color> glow-soft: #132833;
+    // P0 default visual baseline: a quiet developer-dark environment.
+    // Theme selection is deliberately deferred; these tokens make the default
+    // usable for long sessions without turning the Shell into a neon dashboard.
+    in-out property <color> canvas: #0f1115;
+    in-out property <color> surface: #15181e;
+    in-out property <color> surface-raised: #1b2028;
+    in-out property <color> surface-soft: #181c23;
+    in-out property <color> border: #2a3039;
+    in-out property <color> border-soft: #222831;
+    in-out property <color> glow-soft: #1c222b;
 
-    in-out property <color> text: #e8fff9;
-    in-out property <color> text-muted: #9fb8b4;
-    in-out property <color> text-faint: #607975;
-    in-out property <color> ink: #071014;
+    in-out property <color> text: #d8dee9;
+    in-out property <color> text-muted: #a7b0be;
+    in-out property <color> text-faint: #707986;
+    in-out property <color> ink: #111318;
 
-    in-out property <color> accent: #42f5dd;
-    in-out property <color> accent-secondary: #a878ff;
-    in-out property <color> accent-soft: #0e3736;
-    in-out property <color> success: #72f39a;
-    in-out property <color> success-soft: #102a1a;
-    in-out property <color> warning: #ffd166;
-    in-out property <color> warning-soft: #332812;
-    in-out property <color> danger: #ff7e8b;
+    // Familiar editor/terminal-style accents. They carry meaning without
+    // dominating the screen.
+    in-out property <color> accent: #7aa2f7;
+    in-out property <color> accent-secondary: #bb9af7;
+    in-out property <color> accent-soft: #202a3d;
+    in-out property <color> success: #9ece6a;
+    in-out property <color> success-soft: #1b2a1d;
+    in-out property <color> warning: #e0af68;
+    in-out property <color> warning-soft: #302719;
+    in-out property <color> danger: #f7768e;
 
-    in-out property <color> dev: #ff9b3d;
-    in-out property <color> docs: #40dff4;
-    in-out property <color> system: #5cf1bd;
-    in-out property <color> notes: #db70ff;
-    in-out property <color> terminal: #a5ff71;
-    in-out property <color> helmet: #ffd34f;
-    in-out property <color> helmet-dark: #d49321;
+    // Workspace characters remain distinguishable, but deliberately muted.
+    in-out property <color> dev: #d19a66;
+    in-out property <color> docs: #61afef;
+    in-out property <color> system: #98c379;
+    in-out property <color> notes: #c678dd;
+    in-out property <color> terminal: #98c379;
+    in-out property <color> helmet: #e5c07b;
+    in-out property <color> helmet-dark: #b58a4a;
+    in-out property <color> eye: #f0f2f5;
+    in-out property <color> cheek: #d9828e66;
 
     in-out property <length> space-1: 4px;
     in-out property <length> space-2: 8px;
@@ -38,13 +46,13 @@ export global BlobTheme {
     in-out property <length> space-8: 32px;
     in-out property <length> space-10: 40px;
 
-    in-out property <length> radius-sm: 6px;
-    in-out property <length> radius-md: 10px;
-    in-out property <length> radius-lg: 14px;
-    in-out property <length> radius-xl: 20px;
+    in-out property <length> radius-sm: 5px;
+    in-out property <length> radius-md: 8px;
+    in-out property <length> radius-lg: 10px;
+    in-out property <length> radius-xl: 14px;
 
     in-out property <length> rail-width: 188px;
     in-out property <length> technician-width: 340px;
-    in-out property <length> header-height: 44px;
-    in-out property <length> prompt-height: 62px;
+    in-out property <length> header-height: 42px;
+    in-out property <length> prompt-height: 58px;
 }
