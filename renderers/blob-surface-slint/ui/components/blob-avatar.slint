@@ -1,5 +1,9 @@
 import { BlobTheme } from "../design/tokens.slint";
 
+// Canonical P0 3D renderer.
+// The character artwork is pre-rendered; Slint only owns placement, focus,
+// low-frequency idle motion and interaction feedback. This keeps the visual
+// identity faithful to the approved character assets without a real-time 3D scene.
 export component BlobAvatar inherits Rectangle {
     in property <string> name;
     in property <string> role;
@@ -11,16 +15,16 @@ export component BlobAvatar inherits Rectangle {
 
     property <bool> idle-up: false;
     property <bool> sway-left: false;
-    property <bool> blinking: false;
-    property <bool> gesture: false;
     property <bool> sparkle: false;
 
     width: 224px;
     height: 250px;
     background: transparent;
 
+    // Idle changes happen only every few seconds. The whole pre-rendered
+    // character moves as one object instead of continuously animating layers.
     Timer {
-        interval: root.accessory == "helmet" ? 4700ms : root.accessory == "glasses" ? 5400ms : root.accessory == "wrench" ? 5100ms : 5800ms;
+        interval: root.accessory == "helmet" ? 4600ms : root.accessory == "glasses" ? 5200ms : root.accessory == "wrench" ? 4900ms : 5600ms;
         running: true;
         triggered() => {
             root.idle-up = !root.idle-up;
@@ -29,219 +33,85 @@ export component BlobAvatar inherits Rectangle {
     }
 
     Timer {
-        interval: root.accessory == "helmet" ? 3600ms : root.accessory == "glasses" ? 4400ms : root.accessory == "wrench" ? 4100ms : 4900ms;
+        interval: root.accessory == "helmet" ? 7900ms : root.accessory == "glasses" ? 9000ms : root.accessory == "wrench" ? 8400ms : 9700ms;
         running: true;
-        triggered() => { root.blinking = true; }
+        triggered() => { root.sparkle = true; }
     }
-    Timer { interval: 125ms; running: root.blinking; triggered() => { root.blinking = false; } }
-
     Timer {
-        interval: root.accessory == "helmet" ? 7600ms : root.accessory == "glasses" ? 8600ms : root.accessory == "wrench" ? 8100ms : 9300ms;
-        running: true;
-        triggered() => {
-            root.gesture = true;
-            root.sparkle = true;
-        }
+        interval: 850ms;
+        running: root.sparkle;
+        triggered() => { root.sparkle = false; }
     }
-    Timer { interval: 700ms; running: root.gesture; triggered() => { root.gesture = false; } }
-    Timer { interval: 1100ms; running: root.sparkle; triggered() => { root.sparkle = false; } }
 
     halo := Rectangle {
-        x: touch.has-hover ? 11px : 18px;
-        y: touch.has-hover ? 5px : 13px;
-        width: touch.has-hover ? 202px : 188px;
-        height: touch.has-hover ? 202px : 188px;
-        border-radius: 101px;
+        x: touch.has-hover ? 6px : 14px;
+        y: touch.has-hover ? 0px : 9px;
+        width: touch.has-hover ? 212px : 196px;
+        height: touch.has-hover ? 204px : 192px;
+        border-radius: 102px;
         background: touch.has-hover || root.focused ? BlobTheme.glow-soft : transparent;
         border-color: root.focused ? root.blob-color : transparent;
         border-width: root.focused ? 1px : 0px;
-        opacity: root.focused ? 0.72 : 0.48;
+        opacity: root.focused ? 0.72 : 0.42;
         animate x, y, width, height, background, opacity { duration: 180ms; easing: ease-out; }
     }
 
     character := Rectangle {
-        x: touch.has-hover ? 4px : (root.sway-left ? 1px : 7px);
-        y: touch.has-hover ? -3px : (root.idle-up ? 5px : 12px);
+        x: touch.has-hover ? 1px : (root.sway-left ? 3px : 7px);
+        y: touch.has-hover ? -8px : (root.idle-up ? 0px : 7px);
         width: 216px;
-        height: 200px;
+        height: 205px;
         background: transparent;
-        animate x, y { duration: touch.has-hover ? 170ms : 720ms; easing: ease-in-out; }
+        animate x, y { duration: touch.has-hover ? 170ms : 700ms; easing: ease-in-out; }
+
+        // A tiny ground shadow makes the transparent render sit in the Shell.
+        Rectangle {
+            x: touch.has-hover ? 54px : 48px;
+            y: 188px;
+            width: touch.has-hover ? 108px : 120px;
+            height: touch.has-hover ? 7px : 10px;
+            border-radius: 6px;
+            background: #00000058;
+            animate x, width, height { duration: 180ms; easing: ease-out; }
+        }
 
         Image {
-            x: touch.has-hover ? -2px : (root.idle-up ? 1px : 3px);
-            y: touch.has-hover ? 0px : (root.idle-up ? 3px : 0px);
-            width: touch.has-hover ? 220px : (root.idle-up ? 216px : 212px);
-            height: touch.has-hover ? 194px : (root.idle-up ? 188px : 192px);
-            source: root.accessory == "helmet" ? @image-url("../assets/blob-dev.svg") : root.accessory == "glasses" ? @image-url("../assets/blob-docs.svg") : root.accessory == "wrench" ? @image-url("../assets/blob-system.svg") : @image-url("../assets/blob-notes.svg");
+            x: touch.has-hover ? -3px : (root.idle-up ? 0px : 2px);
+            y: touch.has-hover ? -5px : (root.idle-up ? 0px : 3px);
+            width: touch.has-hover ? 222px : (root.idle-up ? 216px : 212px);
+            height: touch.has-hover ? 202px : (root.idle-up ? 198px : 194px);
+            source: root.accessory == "helmet" ? @image-url("../assets/generated/blob-dev-idle.png")
+                : root.accessory == "glasses" ? @image-url("../assets/generated/blob-docs-idle.png")
+                : root.accessory == "wrench" ? @image-url("../assets/generated/blob-system-idle.png")
+                : @image-url("../assets/generated/blob-notes-idle.png");
             image-fit: contain;
             image-rendering: smooth;
             accessible-role: none;
-            animate x, y, width, height { duration: touch.has-hover ? 180ms : 720ms; easing: ease-in-out; }
+            animate x, y, width, height { duration: touch.has-hover ? 180ms : 700ms; easing: ease-in-out; }
         }
 
+        // External particles are intentionally sparse. They are Shell feedback,
+        // not part of the character artwork, so future state-frame packs can
+        // replace the PNG without changing this interaction layer.
         Rectangle {
-            x: 13px;
-            y: touch.has-hover ? 91px : (root.gesture ? 84px : 101px);
-            width: 43px;
-            height: 34px;
-            border-radius: 18px;
-            background: root.blob-color;
-            border-color: #ffffff22;
-            border-width: 1px;
-            animate y { duration: 190ms; easing: ease-out; }
-        }
-        Rectangle {
-            x: 161px;
-            y: touch.has-hover ? 52px : (root.gesture ? 62px : 99px);
-            width: 43px;
-            height: 34px;
-            border-radius: 18px;
-            background: root.blob-color;
-            border-color: #ffffff22;
-            border-width: 1px;
-            animate y { duration: 230ms; easing: ease-out; }
-            Rectangle { x: 7px; y: 5px; width: 18px; height: 6px; border-radius: 3px; background: #ffffff25; }
-        }
-
-        Rectangle {
-            x: touch.has-hover ? 202px : 196px;
-            y: root.sparkle ? 37px : 55px;
-            width: root.sparkle ? 9px : 5px;
-            height: root.sparkle ? 9px : 5px;
-            border-radius: 5px;
-            background: #ffffff44;
-            opacity: root.sparkle || touch.has-hover ? 0.72 : 0.12;
-            animate y, width, height, opacity { duration: 420ms; easing: ease-out; }
-        }
-        Rectangle {
-            x: 8px;
-            y: root.sparkle ? 63px : 79px;
-            width: root.sparkle ? 7px : 4px;
-            height: root.sparkle ? 7px : 4px;
+            x: root.sparkle ? 198px : 190px;
+            y: root.sparkle ? 31px : 50px;
+            width: root.sparkle ? 8px : 4px;
+            height: root.sparkle ? 8px : 4px;
             border-radius: 4px;
             background: root.blob-color;
-            opacity: root.sparkle ? 0.62 : 0.10;
+            opacity: root.sparkle || touch.has-hover ? 0.66 : 0.08;
+            animate x, y, width, height, opacity { duration: 420ms; easing: ease-out; }
+        }
+        Rectangle {
+            x: 11px;
+            y: root.sparkle ? 58px : 73px;
+            width: root.sparkle ? 6px : 3px;
+            height: root.sparkle ? 6px : 3px;
+            border-radius: 3px;
+            background: #ffffff;
+            opacity: root.sparkle ? 0.52 : 0.06;
             animate y, width, height, opacity { duration: 460ms; easing: ease-out; }
-        }
-
-        left-eye := Rectangle {
-            x: touch.has-hover ? 64px : 67px;
-            y: root.blinking ? 103px : (touch.has-hover ? 84px : 89px);
-            width: touch.has-hover ? 31px : 28px;
-            height: root.blinking ? 4px : (touch.has-hover ? 35px : 30px);
-            border-radius: 16px;
-            background: BlobTheme.eye;
-            border-color: #ffffff75;
-            border-width: 1px;
-            clip: true;
-            animate x, y, width, height { duration: root.blinking ? 65ms : 150ms; }
-            Rectangle {
-                x: touch.has-hover ? 12px : (root.sway-left ? 7px : 11px);
-                y: 10px;
-                width: 9px;
-                height: root.blinking ? 0px : 13px;
-                border-radius: 5px;
-                background: BlobTheme.ink;
-                animate x, height { duration: 120ms; }
-            }
-            Rectangle { x: 18px; y: 7px; width: 4px; height: root.blinking ? 0px : 4px; border-radius: 2px; background: #ffffff; }
-        }
-
-        right-eye := Rectangle {
-            x: 123px;
-            y: root.blinking ? 103px : (touch.has-hover ? 84px : 89px);
-            width: touch.has-hover ? 31px : 28px;
-            height: root.blinking ? 4px : (touch.has-hover ? 35px : 30px);
-            border-radius: 16px;
-            background: BlobTheme.eye;
-            border-color: #ffffff75;
-            border-width: 1px;
-            clip: true;
-            animate y, width, height { duration: root.blinking ? 65ms : 150ms; }
-            Rectangle {
-                x: touch.has-hover ? 9px : (root.sway-left ? 6px : 10px);
-                y: 10px;
-                width: 9px;
-                height: root.blinking ? 0px : 13px;
-                border-radius: 5px;
-                background: BlobTheme.ink;
-                animate x, height { duration: 120ms; }
-            }
-            Rectangle { x: 14px; y: 7px; width: 4px; height: root.blinking ? 0px : 4px; border-radius: 2px; background: #ffffff; }
-        }
-
-        Rectangle { x: 49px; y: 125px; width: touch.has-hover || root.gesture ? 20px : 15px; height: 7px; border-radius: 4px; background: BlobTheme.cheek; animate width { duration: 150ms; } }
-        Rectangle { x: 149px; y: 125px; width: touch.has-hover || root.gesture ? 20px : 15px; height: 7px; border-radius: 4px; background: BlobTheme.cheek; animate width { duration: 150ms; } }
-
-        Text {
-            x: touch.has-hover ? 87px : 91px;
-            y: touch.has-hover ? 116px : 118px;
-            width: touch.has-hover ? 46px : 38px;
-            height: 30px;
-            text: touch.has-hover || root.gesture ? "⌣" : "◡";
-            color: BlobTheme.ink;
-            font-size: touch.has-hover || root.gesture ? 29px : 23px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            animate x, width, font-size { duration: 150ms; }
-        }
-
-        if root.accessory == "helmet": Rectangle {
-            x: 53px;
-            y: touch.has-hover ? 11px : (root.gesture ? 7px : 14px);
-            width: 114px;
-            height: 42px;
-            border-radius: 22px;
-            background: BlobTheme.helmet;
-            border-color: #ffe5a455;
-            border-width: 1px;
-            animate y { duration: 180ms; }
-            Rectangle { x: 47px; y: -8px; width: 19px; height: 49px; border-radius: 8px; background: BlobTheme.helmet-dark; }
-            Rectangle { x: -10px; y: 33px; width: 134px; height: 11px; border-radius: 6px; background: BlobTheme.helmet-dark; }
-            Rectangle { x: 14px; y: 5px; width: 45px; height: 9px; border-radius: 5px; background: #ffffff3a; }
-            Text { x: 45px; y: 9px; width: 28px; height: 18px; text: "</>"; color: #3e2d0b; font-size: 9px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-        }
-
-        if root.accessory == "glasses": Rectangle {
-            x: 53px;
-            y: root.blinking ? 87px : (touch.has-hover ? 83px : 86px);
-            width: 55px;
-            height: 39px;
-            border-radius: 16px;
-            background: #10171ddd;
-            border-color: BlobTheme.docs;
-            border-width: 3px;
-            animate y { duration: 120ms; }
-            Rectangle { x: 58px; y: 0px; width: 55px; height: 39px; border-radius: 16px; background: #10171ddd; border-color: BlobTheme.docs; border-width: 3px; }
-            Rectangle { x: 49px; y: 16px; width: 12px; height: 4px; background: BlobTheme.docs; }
-            Rectangle { x: 8px; y: 6px; width: 18px; height: 5px; border-radius: 3px; background: #ffffff31; }
-            Rectangle { x: 66px; y: 6px; width: 18px; height: 5px; border-radius: 3px; background: #ffffff31; }
-        }
-
-        if root.accessory == "wrench": Text {
-            x: 149px;
-            y: touch.has-hover ? 13px : (root.gesture ? 5px : 20px);
-            width: 52px;
-            height: 60px;
-            text: "⚙";
-            color: #bac7c2;
-            font-size: touch.has-hover || root.gesture ? 44px : 39px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            animate y, font-size { duration: 180ms; }
-        }
-
-        if root.accessory == "pencil": Text {
-            x: 151px;
-            y: touch.has-hover ? 7px : (root.gesture ? 1px : 17px);
-            width: 50px;
-            height: 66px;
-            text: "✎";
-            color: #e0a64e;
-            font-size: touch.has-hover || root.gesture ? 47px : 41px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            animate y, font-size { duration: 180ms; }
         }
     }
 
@@ -249,9 +119,9 @@ export component BlobAvatar inherits Rectangle {
         x: 14px;
         y: 208px;
         width: 196px;
-        height: 22px;
+        height: 21px;
         text: root.name;
-        color: root.focused ? BlobTheme.text : BlobTheme.text-muted;
+        color: root.focused ? root.blob-color : BlobTheme.text-muted;
         font-size: 13px;
         font-weight: root.focused ? 600 : 500;
         horizontal-alignment: center;
