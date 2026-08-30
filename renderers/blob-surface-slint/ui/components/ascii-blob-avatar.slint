@@ -14,7 +14,7 @@ export component AsciiBlobAvatar inherits Rectangle {
     property <bool> gesture: false;
 
     width: 224px;
-    height: 250px;
+    height: 254px;
     background: transparent;
 
     Timer {
@@ -46,10 +46,10 @@ export component AsciiBlobAvatar inherits Rectangle {
     }
 
     Text {
-        x: 12px;
-        y: root.frame-two ? 22px : 26px;
-        width: 200px;
-        height: 162px;
+        x: 8px;
+        y: root.frame-two ? 19px : 23px;
+        width: 208px;
+        height: 166px;
         text: root.accessory == "helmet" ?
             (root.blinking ?
                 "      .--------.\n   __/  </>   \\__\n  /__ HARD HAT __\\\n     .-^^^^-.\n   _/  -  -  \\_\n  /    \\__/    \\   _\n |   .-<__>-.    |--<_|\n  \\__\\_VV_/___/\n     /_/  \\_\\" :
@@ -75,7 +75,7 @@ export component AsciiBlobAvatar inherits Rectangle {
                 "       .-^^^^-.\n     _/  >  <   \\_\n    /    \\__/    \\       /\n   |    _/VV\\_    |      /  \\==\n   |   <______.>   |----< PENCIL\n    \\            /      \\  /==\n     '._<__>_.'        \\/\n       /_||_\\");
         color: root.focused ? root.blob-color : BlobTheme.text-muted;
         font-family: "Menlo";
-        font-size: 10px;
+        font-size: BlobTheme.font-small;
         font-weight: 600;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -86,21 +86,21 @@ export component AsciiBlobAvatar inherits Rectangle {
         x: 12px;
         y: 198px;
         width: 200px;
-        height: 20px;
+        height: 23px;
         text: root.name + " [" + root.role + "]";
         color: root.focused ? BlobTheme.accent : BlobTheme.text-muted;
-        font-size: 11px;
+        font-size: BlobTheme.font-body;
         font-weight: root.focused ? 600 : 400;
         horizontal-alignment: center;
     }
     Text {
         x: 12px;
-        y: 219px;
+        y: 222px;
         width: 200px;
-        height: 16px;
+        height: 19px;
         text: root.status;
         color: BlobTheme.text-faint;
-        font-size: 8px;
+        font-size: BlobTheme.font-micro;
         horizontal-alignment: center;
     }
 
