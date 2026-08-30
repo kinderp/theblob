@@ -202,8 +202,34 @@ impl BlobshCommandTrace {
         })
     }
 
+    /// Start a trace from a command typed directly into the expert BLOB bar.
+    /// There is intentionally no synthetic USER natural-language layer: the
+    /// first materialized representation is the user-authored INTENT itself.
+    pub fn from_direct_intent(text: impl Into<String>) -> Result<Self, BlobshTraceError> {
+        let text = text.into();
+        if text.trim().is_empty() {
+            return Err(BlobshTraceError::EmptyText);
+        }
+
+        Ok(Self {
+            layers: vec![BlobshCommandLayer::new(
+                BlobshDepth::Intent,
+                text,
+                true,
+                BlobshProvenance::UserEdited,
+            )],
+            active_depth: BlobshDepth::Intent,
+            status: BlobshCommandStatus::Preview,
+            assistance: BlobshAssistanceMode::Assist,
+        })
+    }
+
     pub fn layers(&self) -> &[BlobshCommandLayer] {
         &self.layers
+    }
+
+    pub fn materialized_count(&self) -> usize {
+        self.layers.len()
     }
 
     pub const fn active_depth(&self) -> BlobshDepth {
@@ -258,6 +284,18 @@ impl BlobshCommandTrace {
         Ok(())
     }
 
+    pub fn can_select_shallower(&self) -> bool {
+        self.active_depth
+            .shallower()
+            .is_some_and(|depth| self.layer(depth).is_some())
+    }
+
+    pub fn can_select_deeper(&self) -> bool {
+        self.active_depth
+            .deeper()
+            .is_some_and(|depth| self.layer(depth).is_some())
+    }
+
     pub fn active_layer(&self) -> &BlobshCommandLayer {
         self.layer(self.active_depth)
             .expect("active depth always refers to an existing layer")
@@ -303,10 +341,11 @@ impl BlobshCommandTrace {
 
     pub fn depth_indicator(&self) -> String {
         format!(
-            "{}/{} {}",
+            "{}/{} {} · {}L",
             self.active_depth.index() + 1,
             BlobshDepth::ALL.len(),
-            self.active_depth.as_str()
+            self.active_depth.as_str(),
+            self.materialized_count()
         )
     }
 }
@@ -356,7 +395,19 @@ mod tests {
         let trace = complete_trace();
         assert_eq!(trace.layers().len(), BlobshDepth::ALL.len());
         assert_eq!(trace.active_depth(), BlobshDepth::Native);
-        assert_eq!(trace.depth_indicator(), "6/6 NATIVE");
+        assert_eq!(trace.depth_indicator(), "6/6 NATIVE · 6L");
+        assert!(trace.can_select_shallower());
+        assert!(!trace.can_select_deeper());
+    }
+
+    #[test]
+    fn direct_expert_intent_does_not_invent_a_user_layer() {
+        let trace = BlobshCommandTrace::from_direct_intent("workspace.open system").unwrap();
+        assert_eq!(trace.layers().len(), 1);
+        assert_eq!(trace.active_depth(), BlobshDepth::Intent);
+        assert_eq!(trace.depth_indicator(), "2/6 INTENT · 1L");
+        assert!(!trace.can_select_shallower());
+        assert!(!trace.can_select_deeper());
     }
 
     #[test]
@@ -373,6 +424,8 @@ mod tests {
             trace.active_layer().provenance,
             BlobshProvenance::UserEdited
         );
+        assert!(trace.can_select_shallower());
+        assert!(!trace.can_select_deeper());
     }
 
     #[test]
