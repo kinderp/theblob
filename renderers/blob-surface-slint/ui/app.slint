@@ -1,6 +1,7 @@
 import { BlobTheme } from "design/tokens.slint";
 import { BlobWorld } from "screens/blob-world.slint";
 import { ContextOverlay } from "components/context-overlay.slint";
+import { BlobshBars } from "components/blobsh-bars.slint";
 
 export component BlobShell inherits Window {
     in property <string> situation-summary;
@@ -26,8 +27,14 @@ export component BlobShell inherits Window {
     in property <int> focused-workspace: 0;
     in property <int> expanded-workspace: -1;
     in-out property <string> blob-style: "soft3d";
+
     in-out property <string> prompt-text: "";
-    in property <string> prompt-status: "romeo · system · bluetooth · why";
+    in property <string> prompt-status: "ask The Blob";
+    in-out property <string> command-text: "";
+    in property <string> command-level: "2/6 INTENT";
+    in property <string> command-status: "preview";
+    in-out property <bool> ai-bar-collapsed: false;
+    in-out property <bool> command-bar-collapsed: false;
 
     in property <bool> overlay-open: false;
     in property <string> overlay-eyebrow: "TECHNICIAN";
@@ -44,6 +51,9 @@ export component BlobShell inherits Window {
     callback system-propose-bluetooth;
     callback system-clear-proposal;
     callback submit-prompt(string);
+    callback submit-command(string);
+    callback command-shallower;
+    callback command-deeper;
 
     title: "The Blob";
     width: 1440px;
@@ -181,35 +191,18 @@ export component BlobShell inherits Window {
             }
         }
 
-        Rectangle {
-            height: 48px;
-            background: #070a0d;
-            border-color: BlobTheme.border;
-            border-width: 1px;
-
-            HorizontalLayout {
-                padding-left: BlobTheme.space-3;
-                padding-right: BlobTheme.space-3;
-                spacing: BlobTheme.space-2;
-
-                Text {
-                    text: "λ  blobsh";
-                    color: BlobTheme.accent;
-                    font-size: 11px;
-                    font-weight: 600;
-                    vertical-alignment: center;
-                }
-                TextInput {
-                    horizontal-stretch: 1;
-                    text <=> root.prompt-text;
-                    color: BlobTheme.text;
-                    selection-background-color: BlobTheme.accent-soft;
-                    font-size: 11px;
-                    single-line: true;
-                    accepted => { root.submit-prompt(root.prompt-text); }
-                }
-                Text { text: "tab complete   ↑ history   ? explain   esc menu"; color: BlobTheme.text-faint; font-size: 8px; vertical-alignment: center; }
-            }
+        BlobshBars {
+            prompt-text <=> root.prompt-text;
+            prompt-status: root.prompt-status;
+            command-text <=> root.command-text;
+            command-level: root.command-level;
+            command-status: root.command-status;
+            ai-collapsed <=> root.ai-bar-collapsed;
+            command-collapsed <=> root.command-bar-collapsed;
+            submit-prompt(text) => { root.submit-prompt(text); }
+            submit-command(text) => { root.submit-command(text); }
+            command-shallower => { root.command-shallower(); }
+            command-deeper => { root.command-deeper(); }
         }
     }
 }
