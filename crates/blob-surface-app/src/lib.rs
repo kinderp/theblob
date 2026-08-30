@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod character;
 pub mod shell;
 
 use blob_core::{BindingPlan, CausalRecord, Situation, Task, TaskState, TechnicianAutonomy};
