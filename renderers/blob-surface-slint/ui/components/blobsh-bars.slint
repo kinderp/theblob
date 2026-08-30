@@ -9,12 +9,28 @@ export component BlobshBars inherits Rectangle {
     in-out property <bool> ai-collapsed: false;
     in-out property <bool> command-collapsed: false;
 
+    in-out property <bool> copilot-open: false;
+    in property <string> copilot-title: "Command Copilot";
+    in property <string> copilot-body: "Edit the BLOB command directly or ask the AI for help.";
+    in property <string> copilot-source: "Blobsh schema";
+    in property <string> completion-1: "";
+    in property <string> completion-2: "";
+    in property <string> completion-3: "";
+
     callback submit-prompt(string);
     callback submit-command(string);
+    callback command-edited(string);
+    callback completion-selected(string);
+    callback ask-ai-about-command(string);
     callback command-shallower;
     callback command-deeper;
 
-    height: (root.ai-collapsed ? 25px : 42px) + (root.command-collapsed ? 25px : 42px);
+    forward-focus: ai-input;
+    init => { ai-input.focus(); }
+
+    height: (root.ai-collapsed ? 25px : 42px)
+        + (root.command-collapsed ? 25px : 42px)
+        + (root.copilot-open ? 78px : 0px);
     background: #070a0d;
 
     VerticalLayout {
@@ -34,22 +50,27 @@ export component BlobshBars inherits Rectangle {
                 Text {
                     text: "λ AI";
                     color: BlobTheme.accent;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
 
-                if !root.ai-collapsed: TextInput {
+                ai-input := TextInput {
+                    visible: !root.ai-collapsed;
                     horizontal-stretch: 1;
                     text <=> root.prompt-text;
                     color: BlobTheme.text;
                     selection-background-color: BlobTheme.accent-soft;
                     font-size: 11px;
+                    font-family: "Menlo";
+                    vertical-alignment: center;
+                    text-cursor-width: 2px;
                     single-line: true;
                     accepted => { root.submit-prompt(root.prompt-text); }
                 }
 
-                if root.ai-collapsed: Text {
+                Text {
+                    visible: root.ai-collapsed;
                     horizontal-stretch: 1;
                     text: root.prompt-status;
                     color: BlobTheme.text-faint;
@@ -64,7 +85,10 @@ export component BlobshBars inherits Rectangle {
                     vertical-alignment: center;
                     ai-collapse := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.ai-collapsed = !root.ai-collapsed; }
+                        clicked => {
+                            root.ai-collapsed = !root.ai-collapsed;
+                            if (!root.ai-collapsed) { ai-input.focus(); }
+                        }
                     }
                 }
             }
@@ -84,7 +108,7 @@ export component BlobshBars inherits Rectangle {
                 Text {
                     text: "> BLOB";
                     color: BlobTheme.accent-secondary;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 600;
                     vertical-alignment: center;
                 }
@@ -110,17 +134,26 @@ export component BlobshBars inherits Rectangle {
                     deeper := TouchArea { mouse-cursor: pointer; clicked => { root.command-deeper(); } }
                 }
 
-                if !root.command-collapsed: TextInput {
+                command-input := TextInput {
+                    visible: !root.command-collapsed;
                     horizontal-stretch: 1;
                     text <=> root.command-text;
                     color: BlobTheme.text;
                     selection-background-color: BlobTheme.accent-soft;
-                    font-size: 10px;
+                    font-size: 11px;
+                    font-family: "Menlo";
+                    vertical-alignment: center;
+                    text-cursor-width: 2px;
                     single-line: true;
+                    edited => {
+                        root.command-edited(root.command-text);
+                        root.copilot-open = true;
+                    }
                     accepted => { root.submit-command(root.command-text); }
                 }
 
-                if root.command-collapsed: Text {
+                Text {
+                    visible: root.command-collapsed;
                     horizontal-stretch: 1;
                     text: root.command-text == "" ? "no command" : root.command-text;
                     color: BlobTheme.text-faint;
@@ -129,6 +162,16 @@ export component BlobshBars inherits Rectangle {
                     overflow: elide;
                 }
 
+                Text {
+                    text: "[?]";
+                    color: copilot-touch.has-hover || root.copilot-open ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                    copilot-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.copilot-open = !root.copilot-open; }
+                    }
+                }
                 Text {
                     text: "[" + root.command-status + "]";
                     color: root.command-status == "approval required" ? BlobTheme.warning : BlobTheme.text-faint;
@@ -142,8 +185,44 @@ export component BlobshBars inherits Rectangle {
                     vertical-alignment: center;
                     command-collapse := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.command-collapsed = !root.command-collapsed; }
+                        clicked => {
+                            root.command-collapsed = !root.command-collapsed;
+                            if (!root.command-collapsed) { command-input.focus(); }
+                        }
                     }
+                }
+            }
+        }
+
+        if root.copilot-open: Rectangle {
+            height: 78px;
+            background: #080c10;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                spacing: BlobTheme.space-4;
+
+                VerticalLayout {
+                    horizontal-stretch: 3;
+                    spacing: 3px;
+                    Text { text: root.copilot-title; color: BlobTheme.accent; font-size: 9px; font-weight: 600; }
+                    Text { text: root.copilot-body; color: BlobTheme.text-muted; font-size: 8px; wrap: word-wrap; }
+                    Text { text: "source: " + root.copilot-source; color: BlobTheme.text-faint; font-size: 7px; }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 2;
+                    spacing: 2px;
+                    Text { text: "COMPLETION"; color: BlobTheme.text-faint; font-size: 7px; }
+                    if root.completion-1 != "": Text { text: "> " + root.completion-1; color: completion-touch-1.has-hover ? BlobTheme.accent : BlobTheme.text; font-size: 8px; completion-touch-1 := TouchArea { mouse-cursor: pointer; clicked => { root.completion-selected(root.completion-1); command-input.focus(); } } }
+                    if root.completion-2 != "": Text { text: "> " + root.completion-2; color: completion-touch-2.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 8px; completion-touch-2 := TouchArea { mouse-cursor: pointer; clicked => { root.completion-selected(root.completion-2); command-input.focus(); } } }
+                    if root.completion-3 != "": Text { text: "> " + root.completion-3; color: completion-touch-3.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 8px; completion-touch-3 := TouchArea { mouse-cursor: pointer; clicked => { root.completion-selected(root.completion-3); command-input.focus(); } } }
+                    Text { text: "[ask AI about this command]"; color: ask-ai-touch.has-hover ? BlobTheme.accent-secondary : BlobTheme.text-faint; font-size: 8px; ask-ai-touch := TouchArea { mouse-cursor: pointer; clicked => { root.ask-ai-about-command(root.command-text); ai-input.focus(); } } }
                 }
             }
         }
