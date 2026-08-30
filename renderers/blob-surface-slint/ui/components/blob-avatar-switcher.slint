@@ -4,6 +4,7 @@ import { AsciiBlobAvatar } from "ascii-blob-avatar.slint";
 
 export component BlobAvatarSwitcher inherits Rectangle {
     in property <string> style: "soft3d";
+    in property <string> action: "idle";
     in property <string> name;
     in property <string> role;
     in property <string> status;
@@ -17,6 +18,7 @@ export component BlobAvatarSwitcher inherits Rectangle {
     background: transparent;
 
     if root.style == "soft3d": BlobAvatar {
+        action: root.action;
         name: root.name;
         role: root.role;
         status: root.status;
@@ -26,6 +28,9 @@ export component BlobAvatarSwitcher inherits Rectangle {
         activated => { root.activated(); }
     }
 
+    // Pixel and ASCII intentionally stay on their existing P0 behavior until
+    // their own animation packs are designed. The shared semantic action API
+    // already exists above them, so they can adopt it without changing Shell state.
     if root.style == "pixel": PixelBlobAvatar {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
