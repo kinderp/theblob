@@ -36,6 +36,14 @@ export component BlobShell inherits Window {
     in-out property <bool> ai-bar-collapsed: false;
     in-out property <bool> command-bar-collapsed: false;
 
+    in-out property <bool> copilot-open: false;
+    in property <string> copilot-title: "Command Copilot";
+    in property <string> copilot-body: "Edit the BLOB command directly or ask the AI for help.";
+    in property <string> copilot-source: "Blobsh schema";
+    in property <string> completion-1: "";
+    in property <string> completion-2: "";
+    in property <string> completion-3: "";
+
     in property <bool> overlay-open: false;
     in property <string> overlay-eyebrow: "TECHNICIAN";
     in property <string> overlay-title: "";
@@ -52,6 +60,9 @@ export component BlobShell inherits Window {
     callback system-clear-proposal;
     callback submit-prompt(string);
     callback submit-command(string);
+    callback command-edited(string);
+    callback completion-selected(string);
+    callback ask-ai-about-command(string);
     callback command-shallower;
     callback command-deeper;
 
@@ -199,8 +210,18 @@ export component BlobShell inherits Window {
             command-status: root.command-status;
             ai-collapsed <=> root.ai-bar-collapsed;
             command-collapsed <=> root.command-bar-collapsed;
+            copilot-open <=> root.copilot-open;
+            copilot-title: root.copilot-title;
+            copilot-body: root.copilot-body;
+            copilot-source: root.copilot-source;
+            completion-1: root.completion-1;
+            completion-2: root.completion-2;
+            completion-3: root.completion-3;
             submit-prompt(text) => { root.submit-prompt(text); }
             submit-command(text) => { root.submit-command(text); }
+            command-edited(text) => { root.command-edited(text); }
+            completion-selected(text) => { root.completion-selected(text); }
+            ask-ai-about-command(text) => { root.ask-ai-about-command(text); }
             command-shallower => { root.command-shallower(); }
             command-deeper => { root.command-deeper(); }
         }
