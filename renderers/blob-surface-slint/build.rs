@@ -13,23 +13,40 @@ fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
         }
     }
 
-    let clean = input
+    let mut clean = input
         .bytes()
         .filter(|byte| !byte.is_ascii_whitespace())
         .collect::<Vec<_>>();
 
-    if clean.len() % 4 != 0 {
-        return Err("base64 input length must be divisible by four".into());
+    // RFC 4648 padding is optional in many encoders. Accept unpadded input
+    // while still rejecting the impossible single-byte remainder.
+    match clean.len() % 4 {
+        0 => {}
+        2 => clean.extend_from_slice(b"=="),
+        3 => clean.push(b'='),
+        _ => return Err("invalid base64 length (remainder 1)".into()),
     }
 
     let mut output = Vec::with_capacity(clean.len() / 4 * 3);
     for chunk in clean.chunks_exact(4) {
         let pad2 = chunk[2] == b'=';
         let pad3 = chunk[3] == b'=';
+        if pad2 && !pad3 {
+            return Err("invalid base64 padding".into());
+        }
+
         let a = value(chunk[0]).ok_or_else(|| "invalid base64 character".to_string())? as u32;
         let b = value(chunk[1]).ok_or_else(|| "invalid base64 character".to_string())? as u32;
-        let c = if pad2 { 0 } else { value(chunk[2]).ok_or_else(|| "invalid base64 character".to_string())? as u32 };
-        let d = if pad3 { 0 } else { value(chunk[3]).ok_or_else(|| "invalid base64 character".to_string())? as u32 };
+        let c = if pad2 {
+            0
+        } else {
+            value(chunk[2]).ok_or_else(|| "invalid base64 character".to_string())? as u32
+        };
+        let d = if pad3 {
+            0
+        } else {
+            value(chunk[3]).ok_or_else(|| "invalid base64 character".to_string())? as u32
+        };
         let packed = (a << 18) | (b << 12) | (c << 6) | d;
         output.push(((packed >> 16) & 0xff) as u8);
         if !pad2 {
@@ -52,6 +69,12 @@ fn materialize_png(name: &str) {
         .unwrap_or_else(|error| panic!("read {}: {error}", encoded_path.display()));
     let decoded = decode_base64(&encoded)
         .unwrap_or_else(|error| panic!("decode {}: {error}", encoded_path.display()));
+
+    const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    if decoded.get(..8) != Some(PNG_SIGNATURE.as_slice()) {
+        panic!("decoded {} is not a PNG", encoded_path.display());
+    }
+
     fs::write(&png_path, decoded)
         .unwrap_or_else(|error| panic!("write {}: {error}", png_path.display()));
 }
