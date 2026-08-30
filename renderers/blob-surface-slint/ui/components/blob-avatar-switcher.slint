@@ -13,12 +13,20 @@ export component BlobAvatarSwitcher inherits Rectangle {
     in property <bool> focused: false;
     callback activated;
 
+    // Temporary P0 adapter until the Rust behavior resolver is wired directly
+    // to the renderer. Explicit semantic action always wins; otherwise the
+    // existing demo status is translated into the same small action vocabulary.
+    property <string> resolved-action: root.action != "idle" ? root.action
+        : root.status == "proposal pending" ? "warning"
+        : root.role == "DEV" && root.status != "" && root.status != "tests ✓" ? "busy"
+        : "idle";
+
     width: 224px;
     height: 250px;
     background: transparent;
 
     if root.style == "soft3d": BlobAvatar {
-        action: root.action;
+        action: root.resolved-action;
         name: root.name;
         role: root.role;
         status: root.status;
