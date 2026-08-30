@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod animation_store;
 pub mod character;
 pub mod shell;
 
