@@ -31,8 +31,10 @@ export component BlobShell inherits Window {
     in-out property <string> prompt-text: "";
     in property <string> prompt-status: "ask The Blob";
     in-out property <string> command-text: "";
-    in property <string> command-level: "2/6 INTENT";
+    in property <string> command-level: "INTENT · draft";
     in property <string> command-status: "preview";
+    in property <bool> command-can-shallower: false;
+    in property <bool> command-can-deeper: false;
     in-out property <bool> ai-bar-collapsed: false;
     in-out property <bool> command-bar-collapsed: false;
 
@@ -72,14 +74,14 @@ export component BlobShell inherits Window {
     background: BlobTheme.canvas;
 
     default-font-family: "Menlo";
-    default-font-size: 11px;
+    default-font-size: BlobTheme.font-body;
     default-font-weight: 400;
 
     VerticalLayout {
         spacing: 0px;
 
         Rectangle {
-            height: 30px;
+            height: 36px;
             background: #070a0d;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
@@ -89,25 +91,25 @@ export component BlobShell inherits Window {
                 padding-right: BlobTheme.space-3;
                 spacing: BlobTheme.space-3;
 
-                Text { text: "The Blob OS"; color: #65d69d; font-size: 10px; font-weight: 600; vertical-alignment: center; }
-                Text { text: "|  P0"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: "The Blob OS"; color: #65d69d; font-size: BlobTheme.font-body; font-weight: 600; vertical-alignment: center; }
+                Text { text: "|  P0"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
                 Text {
                     text: "|  workspace: " + (root.focused-workspace == 0 ? "1 Romeo" : root.focused-workspace == 1 ? "2 Docs" : root.focused-workspace == 2 ? "3 System" : "4 Notes");
                     color: BlobTheme.text;
-                    font-size: 9px;
+                    font-size: BlobTheme.font-small;
                     vertical-alignment: center;
                 }
-                Text { text: "|  shell: blobsh"; color: BlobTheme.text-muted; font-size: 9px; vertical-alignment: center; }
-                Text { text: "|  session: main"; color: BlobTheme.text-muted; font-size: 9px; vertical-alignment: center; }
+                Text { text: "|  shell: blobsh"; color: BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: "|  session: main"; color: BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-                Text { text: "fabric 1"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: "host local"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: "authority user"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: "fabric 1"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: "host local"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: "authority user"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
             }
         }
 
         Rectangle {
-            height: 29px;
+            height: 34px;
             background: #0b0f13;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
@@ -117,16 +119,16 @@ export component BlobShell inherits Window {
                 padding-right: BlobTheme.space-3;
                 spacing: BlobTheme.space-4;
 
-                Text { text: root.focused-workspace == 0 ? "1:Romeo*" : "1:Romeo"; color: root.focused-workspace == 0 ? BlobTheme.dev : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: root.focused-workspace == 1 ? "2:Docs*" : "2:Docs"; color: root.focused-workspace == 1 ? BlobTheme.docs : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: root.focused-workspace == 2 ? "3:System*" : "3:System"; color: root.focused-workspace == 2 ? BlobTheme.system : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: root.focused-workspace == 3 ? "4:Notes*" : "4:Notes"; color: root.focused-workspace == 3 ? BlobTheme.notes : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 0 ? "1:Romeo*" : "1:Romeo"; color: root.focused-workspace == 0 ? BlobTheme.dev : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 1 ? "2:Docs*" : "2:Docs"; color: root.focused-workspace == 1 ? BlobTheme.docs : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 2 ? "3:System*" : "3:System"; color: root.focused-workspace == 2 ? BlobTheme.system : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 3 ? "4:Notes*" : "4:Notes"; color: root.focused-workspace == 3 ? BlobTheme.notes : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
 
                 Text {
                     text: "[3D]";
                     color: root.blob-style == "soft3d" ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 9px;
+                    font-size: BlobTheme.font-small;
                     font-weight: root.blob-style == "soft3d" ? 600 : 400;
                     vertical-alignment: center;
                     three-d-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "soft3d"; } }
@@ -134,7 +136,7 @@ export component BlobShell inherits Window {
                 Text {
                     text: "[PIXEL]";
                     color: root.blob-style == "pixel" ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 9px;
+                    font-size: BlobTheme.font-small;
                     font-weight: root.blob-style == "pixel" ? 600 : 400;
                     vertical-alignment: center;
                     pixel-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "pixel"; } }
@@ -142,15 +144,15 @@ export component BlobShell inherits Window {
                 Text {
                     text: "[ASCII]";
                     color: root.blob-style == "ascii" ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 9px;
+                    font-size: BlobTheme.font-small;
                     font-weight: root.blob-style == "ascii" ? 600 : 400;
                     vertical-alignment: center;
                     ascii-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "ascii"; } }
                 }
 
-                Text { text: "mode: " + (root.expanded-workspace < 0 ? "world" : "world+surfaces"); color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: "surface-host: slint"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
-                Text { text: "placement: local"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                Text { text: "mode: " + (root.expanded-workspace < 0 ? "world" : "world+surfaces"); color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
+                Text { text: "surface-host: slint"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
+                Text { text: "placement: local"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
             }
         }
 
@@ -208,6 +210,8 @@ export component BlobShell inherits Window {
             command-text <=> root.command-text;
             command-level: root.command-level;
             command-status: root.command-status;
+            can-shallower: root.command-can-shallower;
+            can-deeper: root.command-can-deeper;
             ai-collapsed <=> root.ai-bar-collapsed;
             command-collapsed <=> root.command-bar-collapsed;
             copilot-open <=> root.copilot-open;
