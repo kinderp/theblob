@@ -1,0 +1,9 @@
+[package]
+name = "blobsh-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Renderer-neutral AI-native shell trace, depth inspection, editing, provenance and assistance model for The Blob"
+
+[dependencies]
