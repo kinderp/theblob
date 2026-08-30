@@ -1,19 +1,57 @@
 schema_version = 1
 id = "builtin.gremlins.soft3d"
-version = "0.1.0"
+version = "0.2.0"
 renderer = "soft3d"
 creator = "The Blob"
 license = "project-default"
 character_family = "blob-gremlin-v1"
-content_digest = "development-placeholder"
+content_digest = "development-placeholder-v2"
 ai_generated = true
 generation_provenance = "AI-generated character artwork, explicitly reviewed and approved before inclusion"
 
-# P0 contains the canonical idle presentation only. Requests for clips not yet
-# present in this pack resolve to idle through the semantic pack contract.
+# v0.2 registers the semantic states the current 3D renderer can genuinely
+# present. They are renderer-native transform clips over the canonical artwork;
+# dedicated pre-rendered state media can replace them later without changing
+# BlobAction or the store contract. Blink and grin intentionally remain absent
+# until dedicated facial assets exist, so requests safely fall back to idle.
 [[clips]]
 action = "idle"
 frame_count = 1
+frames_per_second = 1
+loops = true
+interruptible = true
+
+[[clips]]
+action = "look"
+frame_count = 1
+frames_per_second = 1
+loops = true
+interruptible = true
+
+[[clips]]
+action = "wave"
+frame_count = 3
+frames_per_second = 6
+loops = false
+interruptible = true
+
+[[clips]]
+action = "busy"
+frame_count = 2
+frames_per_second = 2
+loops = true
+interruptible = true
+
+[[clips]]
+action = "warning"
+frame_count = 2
+frames_per_second = 4
+loops = true
+interruptible = true
+
+[[clips]]
+action = "sleep"
+frame_count = 2
 frames_per_second = 1
 loops = true
 interruptible = true
