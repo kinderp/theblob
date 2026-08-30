@@ -21,6 +21,7 @@ blob-resolver = { path = "../../crates/blob-resolver" }
 blob-executor = { path = "../../crates/blob-executor" }
 blob-surface-app = { path = "../../crates/blob-surface-app" }
 blob-system-workspace = { path = "../../crates/blob-system-workspace" }
+blobsh-core = { path = "../../crates/blobsh-core" }
 
 [build-dependencies]
 slint-build = "=1.17.1"
