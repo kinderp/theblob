@@ -2,9 +2,11 @@ import { BlobTheme } from "../design/tokens.slint";
 
 // Canonical P0 3D renderer.
 // The character artwork is pre-rendered; Slint only owns placement, focus,
-// low-frequency idle motion and interaction feedback. This keeps the visual
-// identity faithful to the approved character assets without a real-time 3D scene.
+// low-frequency motion and interaction feedback. Semantic actions arrive from
+// above the renderer; until a dedicated clip exists, the canonical idle asset
+// is a safe visual fallback.
 export component BlobAvatar inherits Rectangle {
+    in property <string> action: "idle";
     in property <string> name;
     in property <string> role;
     in property <string> status;
@@ -21,10 +23,16 @@ export component BlobAvatar inherits Rectangle {
     height: 250px;
     background: transparent;
 
-    // Idle changes happen only every few seconds. The whole pre-rendered
-    // character moves as one object instead of continuously animating layers.
+    // P0 clip fallback: semantic actions already affect cadence and pose even
+    // before dedicated state frames land. This remains event-driven and cheap.
     Timer {
-        interval: root.accessory == "helmet" ? 4600ms : root.accessory == "glasses" ? 5200ms : root.accessory == "wrench" ? 4900ms : 5600ms;
+        interval: root.action == "warning" ? 620ms
+            : root.action == "busy" ? 1150ms
+            : root.action == "sleep" ? 7600ms
+            : root.accessory == "helmet" ? 4600ms
+            : root.accessory == "glasses" ? 5200ms
+            : root.accessory == "wrench" ? 4900ms
+            : 5600ms;
         running: true;
         triggered() => {
             root.idle-up = !root.idle-up;
@@ -33,8 +41,13 @@ export component BlobAvatar inherits Rectangle {
     }
 
     Timer {
-        interval: root.accessory == "helmet" ? 7900ms : root.accessory == "glasses" ? 9000ms : root.accessory == "wrench" ? 8400ms : 9700ms;
-        running: true;
+        interval: root.action == "busy" ? 4200ms
+            : root.action == "warning" ? 2800ms
+            : root.accessory == "helmet" ? 7900ms
+            : root.accessory == "glasses" ? 9000ms
+            : root.accessory == "wrench" ? 8400ms
+            : 9700ms;
+        running: root.action != "sleep";
         triggered() => { root.sparkle = true; }
     }
     Timer {
@@ -50,26 +63,32 @@ export component BlobAvatar inherits Rectangle {
         height: touch.has-hover ? 204px : 192px;
         border-radius: 102px;
         background: touch.has-hover || root.focused ? BlobTheme.glow-soft : transparent;
-        border-color: root.focused ? root.blob-color : transparent;
-        border-width: root.focused ? 1px : 0px;
-        opacity: root.focused ? 0.72 : 0.42;
+        border-color: root.action == "warning" ? BlobTheme.warning : (root.focused ? root.blob-color : transparent);
+        border-width: root.focused || root.action == "warning" ? 1px : 0px;
+        opacity: root.action == "sleep" ? 0.22 : (root.focused ? 0.72 : 0.42);
         animate x, y, width, height, background, opacity { duration: 180ms; easing: ease-out; }
     }
 
     character := Rectangle {
-        x: touch.has-hover ? 1px : (root.sway-left ? 3px : 7px);
-        y: touch.has-hover ? -8px : (root.idle-up ? 0px : 7px);
+        x: root.action == "warning" ? (root.sway-left ? -2px : 10px)
+            : touch.has-hover ? 1px
+            : (root.sway-left ? 3px : 7px);
+        y: root.action == "sleep" ? 15px
+            : root.action == "wave" ? (root.idle-up ? -5px : 3px)
+            : touch.has-hover ? -8px
+            : (root.idle-up ? 0px : 7px);
         width: 216px;
         height: 205px;
         background: transparent;
-        animate x, y { duration: touch.has-hover ? 170ms : 700ms; easing: ease-in-out; }
+        opacity: root.action == "sleep" ? 0.76 : 1.0;
+        animate x, y, opacity { duration: root.action == "warning" ? 120ms : (touch.has-hover ? 170ms : 700ms); easing: ease-in-out; }
 
         // A tiny ground shadow makes the transparent render sit in the Shell.
         Rectangle {
             x: touch.has-hover ? 54px : 48px;
             y: 188px;
-            width: touch.has-hover ? 108px : 120px;
-            height: touch.has-hover ? 7px : 10px;
+            width: root.action == "sleep" ? 132px : (touch.has-hover ? 108px : 120px);
+            height: root.action == "sleep" ? 12px : (touch.has-hover ? 7px : 10px);
             border-radius: 6px;
             background: #00000058;
             animate x, width, height { duration: 180ms; easing: ease-out; }
@@ -78,8 +97,12 @@ export component BlobAvatar inherits Rectangle {
         Image {
             x: touch.has-hover ? -3px : (root.idle-up ? 0px : 2px);
             y: touch.has-hover ? -5px : (root.idle-up ? 0px : 3px);
-            width: touch.has-hover ? 222px : (root.idle-up ? 216px : 212px);
-            height: touch.has-hover ? 202px : (root.idle-up ? 198px : 194px);
+            width: root.action == "busy" ? (root.idle-up ? 220px : 210px)
+                : touch.has-hover ? 222px
+                : (root.idle-up ? 216px : 212px);
+            height: root.action == "busy" ? (root.idle-up ? 202px : 192px)
+                : touch.has-hover ? 202px
+                : (root.idle-up ? 198px : 194px);
             source: root.accessory == "helmet" ? @image-url("../assets/generated/blob-dev-idle.png")
                 : root.accessory == "glasses" ? @image-url("../assets/generated/blob-docs-idle.png")
                 : root.accessory == "wrench" ? @image-url("../assets/generated/blob-system-idle.png")
@@ -87,7 +110,7 @@ export component BlobAvatar inherits Rectangle {
             image-fit: contain;
             image-rendering: smooth;
             accessible-role: none;
-            animate x, y, width, height { duration: touch.has-hover ? 180ms : 700ms; easing: ease-in-out; }
+            animate x, y, width, height { duration: root.action == "warning" ? 120ms : (touch.has-hover ? 180ms : 700ms); easing: ease-in-out; }
         }
 
         // External particles are intentionally sparse. They are Shell feedback,
@@ -99,7 +122,7 @@ export component BlobAvatar inherits Rectangle {
             width: root.sparkle ? 8px : 4px;
             height: root.sparkle ? 8px : 4px;
             border-radius: 4px;
-            background: root.blob-color;
+            background: root.action == "warning" ? BlobTheme.warning : root.blob-color;
             opacity: root.sparkle || touch.has-hover ? 0.66 : 0.08;
             animate x, y, width, height, opacity { duration: 420ms; easing: ease-out; }
         }
