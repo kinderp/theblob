@@ -7,6 +7,10 @@ export component BlobWorld inherits Rectangle {
     in property <int> focused-workspace: 0;
     in property <int> expanded-workspace: -1;
     in property <string> blob-style: "soft3d";
+    in property <string> romeo-action: "idle";
+    in property <string> docs-action: "idle";
+    in property <string> system-action: "idle";
+    in property <string> notes-action: "idle";
     in property <string> situation-summary;
     in property <string> task-status;
     in property <string> binding-summary;
@@ -57,10 +61,10 @@ export component BlobWorld inherits Rectangle {
                 HorizontalLayout {
                     spacing: BlobTheme.space-4;
                     alignment: center;
-                    BlobAvatarSwitcher { style: root.blob-style; name: "Romeo"; role: "DEV"; status: root.task-status == "Completed" ? "tests ✓" : root.task-status; accessory: "helmet"; blob-color: BlobTheme.dev; focused: root.focused-workspace == 0; activated => { root.activate-workspace(0); } }
-                    BlobAvatarSwitcher { style: root.blob-style; name: "Docs"; role: "DOCS"; status: "context ready"; accessory: "glasses"; blob-color: BlobTheme.docs; focused: root.focused-workspace == 1; activated => { root.activate-workspace(1); } }
-                    BlobAvatarSwitcher { style: root.blob-style; name: "System"; role: "SYSTEM"; status: root.proposal-pending ? "proposal pending" : "healthy"; accessory: "wrench"; blob-color: BlobTheme.system; focused: root.focused-workspace == 2; activated => { root.activate-workspace(2); } }
-                    BlobAvatarSwitcher { style: root.blob-style; name: "Notes"; role: "NOTES"; status: "scratchpad"; accessory: "pencil"; blob-color: BlobTheme.notes; focused: root.focused-workspace == 3; activated => { root.activate-workspace(3); } }
+                    BlobAvatarSwitcher { style: root.blob-style; action: root.romeo-action; name: "Romeo"; role: "DEV"; status: root.task-status == "Completed" ? "tests ✓" : root.task-status; accessory: "helmet"; blob-color: BlobTheme.dev; focused: root.focused-workspace == 0; activated => { root.activate-workspace(0); } }
+                    BlobAvatarSwitcher { style: root.blob-style; action: root.docs-action; name: "Docs"; role: "DOCS"; status: "context ready"; accessory: "glasses"; blob-color: BlobTheme.docs; focused: root.focused-workspace == 1; activated => { root.activate-workspace(1); } }
+                    BlobAvatarSwitcher { style: root.blob-style; action: root.system-action; name: "System"; role: "SYSTEM"; status: root.proposal-pending ? "proposal pending" : "healthy"; accessory: "wrench"; blob-color: BlobTheme.system; focused: root.focused-workspace == 2; activated => { root.activate-workspace(2); } }
+                    BlobAvatarSwitcher { style: root.blob-style; action: root.notes-action; name: "Notes"; role: "NOTES"; status: "scratchpad"; accessory: "pencil"; blob-color: BlobTheme.notes; focused: root.focused-workspace == 3; activated => { root.activate-workspace(3); } }
                 }
             }
         }
