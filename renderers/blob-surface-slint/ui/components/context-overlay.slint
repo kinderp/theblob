@@ -8,8 +8,8 @@ export component ContextOverlay inherits Rectangle {
     in property <string> status;
     callback close;
 
-    width: 520px;
-    height: 330px;
+    width: 600px;
+    height: 390px;
     background: BlobTheme.surface-raised;
     border-color: BlobTheme.accent;
     border-width: 1px;
@@ -24,19 +24,19 @@ export component ContextOverlay inherits Rectangle {
                 text: root.eyebrow;
                 color: BlobTheme.accent;
                 font-family: "monospace";
-                font-size: 11px;
+                font-size: BlobTheme.font-body;
                 font-weight: 700;
             }
             Rectangle { horizontal-stretch: 1; background: transparent; }
             Rectangle {
-                width: 30px;
-                height: 30px;
-                border-radius: 15px;
+                width: 34px;
+                height: 34px;
+                border-radius: 17px;
                 background: close-touch.has-hover ? BlobTheme.surface-soft : transparent;
                 Text {
                     text: "×";
                     color: BlobTheme.text-muted;
-                    font-size: 20px;
+                    font-size: 23px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -51,7 +51,7 @@ export component ContextOverlay inherits Rectangle {
             text: root.title;
             color: BlobTheme.text;
             font-family: "monospace";
-            font-size: 21px;
+            font-size: 23px;
             font-weight: 700;
             wrap: word-wrap;
         }
@@ -59,7 +59,7 @@ export component ContextOverlay inherits Rectangle {
         Text {
             text: root.body;
             color: BlobTheme.text-muted;
-            font-size: 13px;
+            font-size: BlobTheme.font-label;
             wrap: word-wrap;
         }
 
@@ -77,7 +77,7 @@ export component ContextOverlay inherits Rectangle {
                 text: root.detail;
                 color: BlobTheme.text-faint;
                 font-family: "monospace";
-                font-size: 10px;
+                font-size: BlobTheme.font-small;
                 wrap: word-wrap;
             }
         }
@@ -86,7 +86,7 @@ export component ContextOverlay inherits Rectangle {
             text: root.status;
             color: BlobTheme.warning;
             font-family: "monospace";
-            font-size: 10px;
+            font-size: BlobTheme.font-small;
             wrap: word-wrap;
         }
     }
