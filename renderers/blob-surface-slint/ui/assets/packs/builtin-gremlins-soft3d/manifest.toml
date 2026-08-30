@@ -1,0 +1,39 @@
+schema_version = 1
+id = "builtin.gremlins.soft3d"
+version = "0.1.0"
+renderer = "soft3d"
+creator = "The Blob"
+license = "project-default"
+character_family = "blob-gremlin-v1"
+content_digest = "development-placeholder"
+ai_generated = true
+generation_provenance = "AI-generated character artwork, explicitly reviewed and approved before inclusion"
+
+# P0 contains the canonical idle presentation only. Requests for clips not yet
+# present in this pack resolve to idle through the semantic pack contract.
+[[clips]]
+action = "idle"
+frame_count = 1
+frames_per_second = 1
+loops = true
+interruptible = true
+
+[characters.romeo]
+role = "DEV"
+accessory = "helmet"
+asset = "../../generated/blob-dev-idle.png"
+
+[characters.docs]
+role = "DOCS"
+accessory = "glasses"
+asset = "../../generated/blob-docs-idle.png"
+
+[characters.system]
+role = "SYSTEM"
+accessory = "wrench"
+asset = "../../generated/blob-system-idle.png"
+
+[characters.notes]
+role = "NOTES"
+accessory = "pencil"
+asset = "../../generated/blob-notes-idle.png"
