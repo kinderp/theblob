@@ -1,0 +1,151 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+export component BlobshBars inherits Rectangle {
+    in-out property <string> prompt-text: "";
+    in property <string> prompt-status: "ask The Blob";
+    in-out property <string> command-text: "";
+    in property <string> command-level: "2/6 INTENT";
+    in property <string> command-status: "preview";
+    in-out property <bool> ai-collapsed: false;
+    in-out property <bool> command-collapsed: false;
+
+    callback submit-prompt(string);
+    callback submit-command(string);
+    callback command-shallower;
+    callback command-deeper;
+
+    height: (root.ai-collapsed ? 25px : 42px) + (root.command-collapsed ? 25px : 42px);
+    background: #070a0d;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: root.ai-collapsed ? 25px : 42px;
+            background: #070a0d;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                spacing: BlobTheme.space-2;
+
+                Text {
+                    text: "λ AI";
+                    color: BlobTheme.accent;
+                    font-size: 10px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+
+                if !root.ai-collapsed: TextInput {
+                    horizontal-stretch: 1;
+                    text <=> root.prompt-text;
+                    color: BlobTheme.text;
+                    selection-background-color: BlobTheme.accent-soft;
+                    font-size: 11px;
+                    single-line: true;
+                    accepted => { root.submit-prompt(root.prompt-text); }
+                }
+
+                if root.ai-collapsed: Text {
+                    horizontal-stretch: 1;
+                    text: root.prompt-status;
+                    color: BlobTheme.text-faint;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.ai-collapsed ? "[+]" : "[-]";
+                    color: ai-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                    ai-collapse := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.ai-collapsed = !root.ai-collapsed; }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: root.command-collapsed ? 25px : 42px;
+            background: #090d11;
+            border-color: BlobTheme.border;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                spacing: BlobTheme.space-2;
+
+                Text {
+                    text: "> BLOB";
+                    color: BlobTheme.accent-secondary;
+                    font-size: 10px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: "[↑]";
+                    color: shallower.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                    shallower := TouchArea { mouse-cursor: pointer; clicked => { root.command-shallower(); } }
+                }
+                Text {
+                    text: root.command-level;
+                    color: BlobTheme.text-muted;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "[↓]";
+                    color: deeper.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                    deeper := TouchArea { mouse-cursor: pointer; clicked => { root.command-deeper(); } }
+                }
+
+                if !root.command-collapsed: TextInput {
+                    horizontal-stretch: 1;
+                    text <=> root.command-text;
+                    color: BlobTheme.text;
+                    selection-background-color: BlobTheme.accent-soft;
+                    font-size: 10px;
+                    single-line: true;
+                    accepted => { root.submit-command(root.command-text); }
+                }
+
+                if root.command-collapsed: Text {
+                    horizontal-stretch: 1;
+                    text: root.command-text == "" ? "no command" : root.command-text;
+                    color: BlobTheme.text-faint;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: "[" + root.command-status + "]";
+                    color: root.command-status == "approval required" ? BlobTheme.warning : BlobTheme.text-faint;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.command-collapsed ? "[+]" : "[-]";
+                    color: command-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                    command-collapse := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.command-collapsed = !root.command-collapsed; }
+                    }
+                }
+            }
+        }
+    }
+}
