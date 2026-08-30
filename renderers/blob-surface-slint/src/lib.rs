@@ -11,6 +11,9 @@ use blob_surface_app::{
     TechnicianEvidenceContext, TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
 };
 use blob_system_workspace::{demo_baseline_system_spec, SystemWorkspaceProposal};
+use blobsh_core::{
+    BlobshCommandLayer, BlobshCommandStatus, BlobshCommandTrace, BlobshDepth, BlobshProvenance,
+};
 
 slint::include_modules!();
 
@@ -261,62 +264,202 @@ fn clear_system_proposal(ui: &BlobShell) {
     ui.set_system_action(BlobAction::Idle.as_str().into());
 }
 
-fn execute_prompt(
+fn canonical_intent(raw: &str) -> (String, bool) {
+    match raw.trim().to_lowercase().as_str() {
+        "romeo" | "dev" => ("workspace.open romeo".into(), true),
+        "docs" => ("workspace.open docs".into(), true),
+        "system" => ("workspace.open system".into(), true),
+        "notes" => ("workspace.open notes".into(), true),
+        "bluetooth" | "enable bluetooth" | "attiva bluetooth" => {
+            ("system.bluetooth enable".into(), true)
+        }
+        "why" | "why?" | "explain" | "spiega" => {
+            ("technician.explain current".into(), true)
+        }
+        "details" | "dettagli" => ("inspector.show current".into(), true),
+        "home" | "blob" => ("workspace.collapse all".into(), true),
+        "" => (String::new(), false),
+        other => (format!("intent.unresolved {other}"), false),
+    }
+}
+
+fn sync_blobsh_trace(ui: &BlobShell, trace: &BlobshCommandTrace) {
+    ui.set_command_text(trace.active_layer().text.clone().into());
+    ui.set_command_level(trace.depth_indicator().into());
+    ui.set_command_status(trace.status().as_str().into());
+}
+
+fn prepare_prompt_trace(
+    ui: &BlobShell,
+    trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    raw: &str,
+) {
+    if raw.trim().is_empty() {
+        ui.set_prompt_status("ask The Blob · then inspect/edit below".into());
+        return;
+    }
+
+    let Ok(mut trace) = BlobshCommandTrace::from_user_input(raw) else {
+        ui.set_prompt_status("empty prompt".into());
+        return;
+    };
+    let (intent, recognized) = canonical_intent(raw);
+    let _ = trace.append_layer(BlobshCommandLayer::new(
+        BlobshDepth::Intent,
+        intent,
+        true,
+        BlobshProvenance::AiProposed,
+    ));
+    trace.set_status(if recognized {
+        BlobshCommandStatus::Preview
+    } else {
+        BlobshCommandStatus::Invalid
+    });
+
+    sync_blobsh_trace(ui, &trace);
+    *trace_slot.borrow_mut() = Some(trace);
+    ui.set_prompt_text("".into());
+    ui.set_prompt_status(if recognized {
+        "AI translated the request · inspect/edit BLOB command · Enter to process".into()
+    } else {
+        "P0 translator cannot resolve this request yet · edit the BLOB command directly".into()
+    });
+}
+
+fn execute_blob_command(
     ui: &BlobShell,
     shell: &Rc<RefCell<BlobShellState>>,
     technician: &TechnicianProjectionSet,
     snapshot: &DevelopmentSurfaceSnapshot,
+    trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
     raw: &str,
 ) {
-    let command = raw.trim().to_lowercase();
-    let set_status = |message: &str| ui.set_prompt_status(message.into());
+    let mut slot = trace_slot.borrow_mut();
+    let Some(trace) = slot.as_mut() else {
+        ui.set_prompt_status("enter an AI request first, or create an INTENT preview".into());
+        return;
+    };
 
+    if trace.active_depth() != BlobshDepth::Intent {
+        ui.set_prompt_status(
+            "processing is anchored at INTENT in P0 · use ↑ to return to INTENT".into(),
+        );
+        return;
+    }
+
+    if trace.active_layer().text != raw.trim() {
+        let _ = trace.edit_layer(BlobshDepth::Intent, raw.trim());
+    }
+
+    let command = raw.trim().to_lowercase();
     match command.as_str() {
-        "romeo" | "dev" => {
+        "workspace.open romeo" => {
             shell.borrow_mut().toggle_single_workspace(0);
             apply_shell_state(ui, &shell.borrow());
-            set_status("Romeo · Workspace intent");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("Romeo Workspace intent processed".into());
         }
-        "docs" => {
+        "workspace.open docs" => {
             shell.borrow_mut().toggle_single_workspace(1);
             apply_shell_state(ui, &shell.borrow());
-            set_status("Docs · Workspace intent");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("Docs Workspace intent processed".into());
         }
-        "system" => {
+        "workspace.open system" => {
             shell.borrow_mut().toggle_single_workspace(2);
             apply_shell_state(ui, &shell.borrow());
-            set_status("System · Workspace intent");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("System Workspace intent processed".into());
         }
-        "notes" => {
+        "workspace.open notes" => {
             shell.borrow_mut().toggle_single_workspace(3);
             apply_shell_state(ui, &shell.borrow());
-            set_status("Notes · Workspace intent");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("Notes Workspace intent processed".into());
         }
-        "bluetooth" | "enable bluetooth" => {
+        "system.bluetooth enable" => {
             shell.borrow_mut().toggle_single_workspace(2);
             apply_shell_state(ui, &shell.borrow());
             let proposal = SystemWorkspaceProposal::bluetooth_demo();
             apply_bluetooth_proposal(ui, &proposal);
-            set_status("Bluetooth · semantic proposal prepared");
+
+            let _ = trace.append_layer(BlobshCommandLayer::new(
+                BlobshDepth::Plan,
+                "target=local · proposal-only · authority=user",
+                true,
+                BlobshProvenance::Derived,
+            ));
+            let _ = trace.append_layer(BlobshCommandLayer::new(
+                BlobshDepth::Spec,
+                proposal.semantic_diff_lines().join(" · "),
+                true,
+                BlobshProvenance::Derived,
+            ));
+            trace.set_status(BlobshCommandStatus::ApprovalRequired);
+            ui.set_prompt_status(
+                "Bluetooth proposal reached SPEC · BACKEND/NATIVE not materialized in P0".into(),
+            );
         }
-        "why" | "why?" | "explain" => {
+        "technician.explain current" => {
             show_projection(ui, technician.for_intent(TechnicianIntent::ExplainCurrent));
-            set_status("Technician · evidence-backed explanation");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("Technician explanation opened".into());
         }
-        "details" => {
+        "inspector.show current" => {
             show_details(ui, snapshot);
-            set_status("Inspector · semantic evidence");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("Semantic evidence inspector opened".into());
         }
-        "home" | "blob" => {
+        "workspace.collapse all" => {
             shell.borrow_mut().collapse_all();
             apply_shell_state(ui, &shell.borrow());
-            set_status("Blob mode · four Workspaces");
+            trace.set_status(BlobshCommandStatus::Ready);
+            ui.set_prompt_status("World mode restored".into());
         }
-        "" => set_status("romeo · docs · system · notes · bluetooth · why"),
-        _ => set_status("unknown P0 intent · try romeo, docs, system, notes, bluetooth, why"),
+        _ => {
+            trace.set_status(BlobshCommandStatus::Invalid);
+            ui.set_prompt_status(
+                "unknown P0 BLOB command · edit INTENT or ask AI for a supported action".into(),
+            );
+        }
     }
 
-    ui.set_prompt_text("".into());
+    sync_blobsh_trace(ui, trace);
+}
+
+fn move_command_depth(
+    ui: &BlobShell,
+    trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    deeper: bool,
+) {
+    let mut slot = trace_slot.borrow_mut();
+    let Some(trace) = slot.as_mut() else {
+        ui.set_prompt_status("no command trace yet".into());
+        return;
+    };
+
+    let target = if deeper {
+        trace.active_depth().deeper()
+    } else {
+        trace.active_depth().shallower()
+    };
+    let Some(target) = target else {
+        ui.set_prompt_status("already at the end of this trace".into());
+        return;
+    };
+
+    if trace.select_depth(target).is_ok() {
+        sync_blobsh_trace(ui, trace);
+        ui.set_prompt_status(format!("Depth Inspector · {}", target.as_str()).into());
+    } else {
+        ui.set_prompt_status(
+            format!(
+                "{} is not materialized yet · The Blob never invents a lower-level command",
+                target.as_str()
+            )
+            .into(),
+        );
+    }
 }
 
 pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::PlatformError> {
@@ -337,6 +480,7 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     let shell = Rc::new(RefCell::new(BlobShellState::demo_local("surface-host:macos-p0")));
     let technician = Rc::new(snapshot.technician.clone());
     let snapshot = Rc::new(snapshot.clone());
+    let blobsh_trace = Rc::new(RefCell::new(None::<BlobshCommandTrace>));
     apply_shell_state(&ui, &shell.borrow());
 
     {
@@ -406,12 +550,47 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     }
     {
         let weak = ui.as_weak();
+        let blobsh_trace = Rc::clone(&blobsh_trace);
+        ui.on_submit_prompt(move |prompt| {
+            if let Some(ui) = weak.upgrade() {
+                prepare_prompt_trace(&ui, &blobsh_trace, prompt.as_str());
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
         let shell = Rc::clone(&shell);
         let technician = Rc::clone(&technician);
         let snapshot = Rc::clone(&snapshot);
-        ui.on_submit_prompt(move |command| {
+        let blobsh_trace = Rc::clone(&blobsh_trace);
+        ui.on_submit_command(move |command| {
             if let Some(ui) = weak.upgrade() {
-                execute_prompt(&ui, &shell, &technician, &snapshot, command.as_str());
+                execute_blob_command(
+                    &ui,
+                    &shell,
+                    &technician,
+                    &snapshot,
+                    &blobsh_trace,
+                    command.as_str(),
+                );
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let blobsh_trace = Rc::clone(&blobsh_trace);
+        ui.on_command_shallower(move || {
+            if let Some(ui) = weak.upgrade() {
+                move_command_depth(&ui, &blobsh_trace, false);
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let blobsh_trace = Rc::clone(&blobsh_trace);
+        ui.on_command_deeper(move || {
+            if let Some(ui) = weak.upgrade() {
+                move_command_depth(&ui, &blobsh_trace, true);
             }
         });
     }
@@ -471,6 +650,26 @@ mod tests {
                 BlobAction::Warning,
                 BlobAction::Idle,
             ]
+        );
+    }
+
+    #[test]
+    fn ai_prompt_translation_produces_a_separate_editable_intent() {
+        assert_eq!(
+            canonical_intent("attiva bluetooth"),
+            ("system.bluetooth enable".into(), true)
+        );
+        assert_eq!(
+            canonical_intent("Romeo"),
+            ("workspace.open romeo".into(), true)
+        );
+    }
+
+    #[test]
+    fn unknown_prompt_is_exposed_instead_of_silently_executed() {
+        assert_eq!(
+            canonical_intent("fai una cosa nuova"),
+            ("intent.unresolved fai una cosa nuova".into(), false)
         );
     }
 }
