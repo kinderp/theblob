@@ -9,6 +9,11 @@ export component BlobShell inherits Window {
     in property <string> verifier-summary;
     in property <string> execution-output;
 
+    in property <string> romeo-action: "idle";
+    in property <string> docs-action: "idle";
+    in property <string> system-action: "idle";
+    in property <string> notes-action: "idle";
+
     in property <bool> bluetooth-enabled: false;
     in property <string> bluetooth-label: "Bluetooth disabled";
     in property <string> pipewire-label: "PipeWire enabled";
@@ -136,6 +141,10 @@ export component BlobShell inherits Window {
                 focused-workspace: root.focused-workspace;
                 expanded-workspace: root.expanded-workspace;
                 blob-style: root.blob-style;
+                romeo-action: root.romeo-action;
+                docs-action: root.docs-action;
+                system-action: root.system-action;
+                notes-action: root.notes-action;
                 situation-summary: root.situation-summary;
                 task-status: root.task-status;
                 binding-summary: root.binding-summary;
@@ -152,7 +161,7 @@ export component BlobShell inherits Window {
                 activate-workspace(index) => { root.activate-workspace(index); }
                 collapse-workspaces => { root.collapse-workspaces(); }
                 system-propose-bluetooth => { root.system-propose-bluetooth(); }
-                system-clear-proposal => { root.system-clear-proposal(); }
+                system-clear-proposal => { root.system-clear_proposal(); }
                 explain-current => { root.explain-current(); }
                 show-details => { root.show-details(); }
             }
