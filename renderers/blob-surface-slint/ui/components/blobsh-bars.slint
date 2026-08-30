@@ -1,55 +1,110 @@
 import { BlobTheme } from "../design/tokens.slint";
+import { ScrollView } from "std-widgets.slint";
 
-// Terminal-like single-line editor shared by both Blobsh bars. The native
-// blinking caret shares the TextInput baseline and remains visible while long
-// expert commands scroll horizontally.
+// Terminal-like editor shared by both Blobsh bars. Compact mode is a single
+// line; expanded mode is multiline and vertically scrollable. Completion keys
+// and depth keys are deliberately disjoint.
 component BlobshLineEditor inherits Rectangle {
     in-out property <string> text: "";
     in property <brush> text-color: BlobTheme.text;
-    in property <string> tab-completion: "";
+    in property <bool> expanded: true;
+    in property <bool> completion-open: false;
+    in property <string> selected-completion: "";
+
     callback accepted;
     callback edited;
-    callback tab-complete(string);
+    callback apply-completion(string);
+    callback completion-previous;
+    callback completion-next;
+    callback close-completion;
+    callback depth-shallower;
+    callback depth-deeper;
 
-    private property <length> caret-margin: 8px;
+    private property <length> caret-margin: 10px;
+    private property <length> line-height: BlobTheme.font-body + 7px;
     forward-focus: editor;
     background: transparent;
     clip: true;
 
-    editor := TextInput {
-        x: 0px;
-        y: 0px;
-        height: parent.height;
-        width: max(parent.width, self.preferred-width + 4px);
-        text <=> root.text;
-        color: root.text-color;
-        selection-background-color: BlobTheme.accent-soft;
-        font-size: 11px;
-        font-family: "Menlo";
-        vertical-alignment: center;
-        text-cursor-width: 2px;
-        single-line: true;
+    public function caret-to-end() {
+        // P0 BLOB grammar is ASCII; character-count therefore equals the
+        // UTF-8 byte offset expected by set-selection-offsets for completions.
+        editor.set-selection-offsets(root.text.character-count, root.text.character-count);
+        editor.focus();
+    }
 
-        cursor-position-changed(position) => {
-            if (position.x + self.x < root.caret-margin) {
-                self.x = -position.x + root.caret-margin;
-            } else if (position.x + self.x > parent.width - root.caret-margin - self.text-cursor-width) {
-                self.x = parent.width - position.x - root.caret-margin - self.text-cursor-width;
-            } else if (self.preferred-width <= parent.width) {
-                self.x = 0px;
+    scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: root.expanded ? self.visible-width : max(self.visible-width, editor.preferred-width + 6px);
+        viewport-height: root.expanded ? max(self.visible-height, editor.preferred-height + 10px) : self.visible-height;
+
+        editor := TextInput {
+            x: 0px;
+            y: 0px;
+            width: root.expanded ? max(40px, scroll.visible-width) : max(scroll.visible-width, self.preferred-width + 6px);
+            height: root.expanded ? max(scroll.visible-height, self.preferred-height + 10px) : scroll.visible-height;
+            text <=> root.text;
+            color: root.text-color;
+            selection-background-color: BlobTheme.accent-soft;
+            font-size: BlobTheme.font-body;
+            font-family: "Menlo";
+            vertical-alignment: root.expanded ? top : center;
+            text-cursor-width: 2px;
+            single-line: !root.expanded;
+            wrap: root.expanded ? word-wrap : no-wrap;
+
+            cursor-position-changed(position) => {
+                if (!root.expanded) {
+                    if (position.x + scroll.viewport-x < root.caret-margin) {
+                        scroll.viewport-x = -position.x + root.caret-margin;
+                    } else if (position.x + scroll.viewport-x > scroll.visible-width - root.caret-margin - self.text-cursor-width) {
+                        scroll.viewport-x = scroll.visible-width - position.x - root.caret-margin - self.text-cursor-width;
+                    } else if (self.preferred-width <= scroll.visible-width) {
+                        scroll.viewport-x = 0px;
+                    }
+                } else {
+                    scroll.viewport-x = 0px;
+                    if (position.y + scroll.viewport-y < root.caret-margin) {
+                        scroll.viewport-y = -position.y + root.caret-margin;
+                    } else if (position.y + root.line-height + scroll.viewport-y > scroll.visible-height - root.caret-margin) {
+                        scroll.viewport-y = scroll.visible-height - position.y - root.line-height - root.caret-margin;
+                    }
+                }
             }
-        }
-        edited => {
-            if (self.preferred-width <= parent.width) { self.x = 0px; }
-            root.edited();
-        }
-        accepted => { root.accepted(); }
-        key-pressed(event) => {
-            if (event.text == Key.Tab && root.tab-completion != "") {
-                root.tab-complete(root.tab-completion);
-                accept
-            } else {
-                reject
+
+            edited => {
+                if (!root.expanded && self.preferred-width <= scroll.visible-width) {
+                    scroll.viewport-x = 0px;
+                }
+                root.edited();
+            }
+
+            key-pressed(event) => {
+                if (event.modifiers.alt && event.text == Key.UpArrow) {
+                    root.depth-shallower();
+                    accept
+                } else if (event.modifiers.alt && event.text == Key.DownArrow) {
+                    root.depth-deeper();
+                    accept
+                } else if (root.completion-open && event.text == Key.UpArrow) {
+                    root.completion-previous();
+                    accept
+                } else if (root.completion-open && event.text == Key.DownArrow) {
+                    root.completion-next();
+                    accept
+                } else if (event.text == Key.Tab && root.selected-completion != "") {
+                    root.apply-completion(root.selected-completion);
+                    accept
+                } else if (event.text == Key.Escape && root.completion-open) {
+                    root.close-completion();
+                    accept
+                } else if (event.text == Key.Return && (!event.modifiers.shift || !root.expanded)) {
+                    root.accepted();
+                    accept
+                } else {
+                    reject
+                }
             }
         }
     }
@@ -59,8 +114,13 @@ export component BlobshBars inherits Rectangle {
     in-out property <string> prompt-text: "";
     in property <string> prompt-status: "ask The Blob";
     in-out property <string> command-text: "";
-    in property <string> command-level: "2/6 INTENT";
+    in property <string> command-level: "INTENT · draft";
     in property <string> command-status: "preview";
+    in property <bool> can-shallower: false;
+    in property <bool> can-deeper: false;
+
+    // `collapsed` means compact one-line mode, not hidden. Both bars remain
+    // usable at all times; expanded mode uses multiline editing + scroll.
     in-out property <bool> ai-collapsed: false;
     in-out property <bool> command-collapsed: false;
 
@@ -80,19 +140,26 @@ export component BlobshBars inherits Rectangle {
     callback command-shallower;
     callback command-deeper;
 
+    private property <int> completion-count: root.completion-3 != "" ? 3 : root.completion-2 != "" ? 2 : root.completion-1 != "" ? 1 : 0;
+    private property <int> completion-index: 0;
+    private property <string> selected-completion: root.completion-count == 0 ? ""
+        : root.completion-index == 1 ? root.completion-2
+        : root.completion-index == 2 ? root.completion-3
+        : root.completion-1;
+
     forward-focus: ai-input;
     init => { ai-input.focus(); }
 
-    height: (root.ai-collapsed ? 25px : 42px)
-        + (root.command-collapsed ? 25px : 42px)
-        + (root.copilot-open ? 82px : 0px);
+    height: (root.ai-collapsed ? 46px : BlobTheme.prompt-expanded-height)
+        + (root.command-collapsed ? 46px : BlobTheme.prompt-expanded-height)
+        + (root.copilot-open ? 112px : 0px);
     background: #070a0d;
 
     VerticalLayout {
         spacing: 0px;
 
         Rectangle {
-            height: root.ai-collapsed ? 25px : 42px;
+            height: root.ai-collapsed ? 46px : BlobTheme.prompt-expanded-height;
             background: #070a0d;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
@@ -100,42 +167,35 @@ export component BlobshBars inherits Rectangle {
             HorizontalLayout {
                 padding-left: BlobTheme.space-3;
                 padding-right: BlobTheme.space-3;
+                padding-top: root.ai-collapsed ? 0px : 8px;
+                padding-bottom: root.ai-collapsed ? 0px : 8px;
                 spacing: BlobTheme.space-2;
 
                 Text {
                     text: "λ AI";
                     color: BlobTheme.accent;
-                    font-size: 11px;
+                    font-size: BlobTheme.font-label;
                     font-weight: 600;
-                    vertical-alignment: center;
+                    vertical-alignment: root.ai-collapsed ? center : top;
                 }
 
                 ai-input := BlobshLineEditor {
-                    visible: !root.ai-collapsed;
                     horizontal-stretch: 1;
                     text <=> root.prompt-text;
+                    expanded: !root.ai-collapsed;
                     accepted => { root.submit-prompt(root.prompt-text); }
                 }
 
                 Text {
-                    visible: root.ai-collapsed;
-                    horizontal-stretch: 1;
-                    text: root.prompt-status;
-                    color: BlobTheme.text-faint;
-                    font-size: 8px;
-                    vertical-alignment: center;
-                }
-
-                Text {
-                    text: root.ai-collapsed ? "[+]" : "[-]";
+                    text: root.ai-collapsed ? "[↕]" : "[1L]";
                     color: ai-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 9px;
-                    vertical-alignment: center;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.ai-collapsed ? center : top;
                     ai-collapse := TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
                             root.ai-collapsed = !root.ai-collapsed;
-                            if (!root.ai-collapsed) { ai-input.focus(); }
+                            ai-input.focus();
                         }
                     }
                 }
@@ -143,7 +203,7 @@ export component BlobshBars inherits Rectangle {
         }
 
         Rectangle {
-            height: root.command-collapsed ? 25px : 42px;
+            height: root.command-collapsed ? 46px : BlobTheme.prompt-expanded-height;
             background: #090d11;
             border-color: BlobTheme.border;
             border-width: 1px;
@@ -151,98 +211,120 @@ export component BlobshBars inherits Rectangle {
             HorizontalLayout {
                 padding-left: BlobTheme.space-3;
                 padding-right: BlobTheme.space-3;
+                padding-top: root.command-collapsed ? 0px : 8px;
+                padding-bottom: root.command-collapsed ? 0px : 8px;
                 spacing: BlobTheme.space-2;
 
                 Text {
                     text: "> BLOB";
                     color: BlobTheme.accent-secondary;
-                    font-size: 11px;
+                    font-size: BlobTheme.font-label;
                     font-weight: 600;
-                    vertical-alignment: center;
+                    vertical-alignment: root.command-collapsed ? center : top;
                 }
 
                 Text {
                     text: "[↑]";
-                    color: shallower.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 8px;
-                    vertical-alignment: center;
-                    shallower := TouchArea { mouse-cursor: pointer; clicked => { root.command-shallower(); } }
+                    color: !root.can-shallower ? BlobTheme.text-faint : shallower.has-hover ? BlobTheme.accent : BlobTheme.text-muted;
+                    opacity: root.can-shallower ? 1 : 0.42;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.command-collapsed ? center : top;
+                    shallower := TouchArea {
+                        enabled: root.can-shallower;
+                        mouse-cursor: pointer;
+                        clicked => { root.command-shallower(); }
+                    }
                 }
                 Text {
                     text: root.command-level;
                     color: BlobTheme.text-muted;
-                    font-size: 8px;
-                    vertical-alignment: center;
+                    font-size: BlobTheme.font-micro;
+                    vertical-alignment: root.command-collapsed ? center : top;
                 }
                 Text {
                     text: "[↓]";
-                    color: deeper.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 8px;
-                    vertical-alignment: center;
-                    deeper := TouchArea { mouse-cursor: pointer; clicked => { root.command-deeper(); } }
+                    color: !root.can-deeper ? BlobTheme.text-faint : deeper.has-hover ? BlobTheme.accent : BlobTheme.text-muted;
+                    opacity: root.can-deeper ? 1 : 0.42;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.command-collapsed ? center : top;
+                    deeper := TouchArea {
+                        enabled: root.can-deeper;
+                        mouse-cursor: pointer;
+                        clicked => { root.command-deeper(); }
+                    }
                 }
 
                 command-input := BlobshLineEditor {
-                    visible: !root.command-collapsed;
                     horizontal-stretch: 1;
                     text <=> root.command-text;
-                    tab-completion: root.completion-1;
+                    expanded: !root.command-collapsed;
+                    completion-open: root.copilot-open && root.completion-count > 0;
+                    selected-completion: root.selected-completion;
                     edited => {
+                        root.completion-index = 0;
                         root.command-edited(root.command-text);
                         root.copilot-open = true;
                     }
-                    tab-complete(text) => {
+                    completion-previous => {
+                        if (root.completion-count > 0) {
+                            root.completion-index = root.completion-index <= 0 ? root.completion-count - 1 : root.completion-index - 1;
+                        }
+                    }
+                    completion-next => {
+                        if (root.completion-count > 0) {
+                            root.completion-index = root.completion-index >= root.completion-count - 1 ? 0 : root.completion-index + 1;
+                        }
+                    }
+                    apply-completion(text) => {
+                        root.command-text = text;
+                        root.completion-index = 0;
                         root.completion-selected(text);
+                        command-input.caret-to-end();
                         root.copilot-open = true;
                     }
+                    close-completion => { root.copilot-open = false; }
+                    depth-shallower => { if (root.can-shallower) { root.command-shallower(); } }
+                    depth-deeper => { if (root.can-deeper) { root.command-deeper(); } }
                     accepted => { root.submit-command(root.command-text); }
                 }
 
                 Text {
-                    visible: root.command-collapsed;
-                    horizontal-stretch: 1;
-                    text: root.command-text == "" ? "no command" : root.command-text;
-                    color: BlobTheme.text-faint;
-                    font-size: 8px;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-
-                Text {
-                    visible: root.completion-1 != "" && !root.command-collapsed;
+                    visible: root.selected-completion != "";
                     text: "[Tab]";
                     color: BlobTheme.text-faint;
-                    font-size: 7px;
-                    vertical-alignment: center;
+                    font-size: BlobTheme.font-micro;
+                    vertical-alignment: root.command-collapsed ? center : top;
                 }
                 Text {
                     text: "[?]";
                     color: copilot-touch.has-hover || root.copilot-open ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 9px;
-                    vertical-alignment: center;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.command-collapsed ? center : top;
                     copilot-touch := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.copilot-open = !root.copilot-open; }
+                        clicked => {
+                            root.copilot-open = !root.copilot-open;
+                            root.completion-index = 0;
+                            command-input.focus();
+                        }
                     }
                 }
                 Text {
                     text: "[" + root.command-status + "]";
-                    color: root.command-status == "approval required" ? BlobTheme.warning
-                        : root.command-status == "invalid" ? BlobTheme.warning
-                        : BlobTheme.text-faint;
-                    font-size: 8px;
-                    vertical-alignment: center;
+                    color: root.command-status == "approval required" || root.command-status == "invalid" ? BlobTheme.warning : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-micro;
+                    vertical-alignment: root.command-collapsed ? center : top;
                 }
                 Text {
-                    text: root.command-collapsed ? "[+]" : "[-]";
+                    text: root.command-collapsed ? "[↕]" : "[1L]";
                     color: command-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
-                    font-size: 9px;
-                    vertical-alignment: center;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.command-collapsed ? center : top;
                     command-collapse := TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
                             root.command-collapsed = !root.command-collapsed;
-                            if (!root.command-collapsed) { command-input.focus(); }
+                            command-input.focus();
                         }
                     }
                 }
@@ -250,7 +332,7 @@ export component BlobshBars inherits Rectangle {
         }
 
         if root.copilot-open: Rectangle {
-            height: 82px;
+            height: 112px;
             background: #080c10;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
@@ -258,59 +340,73 @@ export component BlobshBars inherits Rectangle {
             HorizontalLayout {
                 padding-left: BlobTheme.space-3;
                 padding-right: BlobTheme.space-3;
-                padding-top: 6px;
-                padding-bottom: 6px;
+                padding-top: 8px;
+                padding-bottom: 8px;
                 spacing: BlobTheme.space-4;
 
                 VerticalLayout {
                     horizontal-stretch: 3;
-                    spacing: 3px;
-                    Text { text: root.copilot-title; color: BlobTheme.accent; font-size: 9px; font-weight: 600; }
-                    Text { text: root.copilot-body; color: BlobTheme.text-muted; font-size: 8px; wrap: word-wrap; }
-                    Text { text: "source: " + root.copilot-source; color: BlobTheme.text-faint; font-size: 7px; }
+                    spacing: 4px;
+                    Text { text: root.copilot-title; color: BlobTheme.accent; font-size: BlobTheme.font-small; font-weight: 600; }
+                    Text { text: root.copilot-body; color: BlobTheme.text-muted; font-size: BlobTheme.font-small; wrap: word-wrap; }
+                    Text { text: "source: " + root.copilot-source; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; }
+                    Text { text: "↑/↓ select · Tab insert · Alt+↑/↓ depth · Enter process · Shift+Enter newline"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; }
                 }
 
                 VerticalLayout {
                     horizontal-stretch: 2;
-                    spacing: 2px;
+                    spacing: 3px;
                     Text {
-                        text: root.completion-1 == "" && root.completion-2 == "" && root.completion-3 == ""
-                            ? "NO DETERMINISTIC COMPLETION"
-                            : "COMPLETION · TAB = FIRST";
+                        text: root.completion-count == 0 ? "NO DETERMINISTIC COMPLETION" : "COMPLETION";
                         color: BlobTheme.text-faint;
-                        font-size: 7px;
+                        font-size: BlobTheme.font-micro;
                     }
-                    if root.completion-1 != "": Text {
-                        text: "> " + root.completion-1;
-                        color: completion-touch-1.has-hover ? BlobTheme.accent : BlobTheme.text;
-                        font-size: 8px;
+                    if root.completion-1 != "": Rectangle {
+                        height: 20px;
+                        background: root.completion-index == 0 ? BlobTheme.accent-soft : completion-touch-1.has-hover ? BlobTheme.surface-raised : transparent;
+                        Text { x: 4px; text: (root.completion-index == 0 ? "▶ " : "  ") + root.completion-1; color: root.completion-index == 0 ? BlobTheme.accent : BlobTheme.text; font-size: BlobTheme.font-small; vertical-alignment: center; }
                         completion-touch-1 := TouchArea {
                             mouse-cursor: pointer;
-                            clicked => { root.completion-selected(root.completion-1); command-input.focus(); }
+                            clicked => {
+                                root.command-text = root.completion-1;
+                                root.completion-index = 0;
+                                root.completion-selected(root.completion-1);
+                                command-input.caret-to-end();
+                            }
                         }
                     }
-                    if root.completion-2 != "": Text {
-                        text: "> " + root.completion-2;
-                        color: completion-touch-2.has-hover ? BlobTheme.accent : BlobTheme.text-muted;
-                        font-size: 8px;
+                    if root.completion-2 != "": Rectangle {
+                        height: 20px;
+                        background: root.completion-index == 1 ? BlobTheme.accent-soft : completion-touch-2.has-hover ? BlobTheme.surface-raised : transparent;
+                        Text { x: 4px; text: (root.completion-index == 1 ? "▶ " : "  ") + root.completion-2; color: root.completion-index == 1 ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
                         completion-touch-2 := TouchArea {
                             mouse-cursor: pointer;
-                            clicked => { root.completion-selected(root.completion-2); command-input.focus(); }
+                            clicked => {
+                                root.command-text = root.completion-2;
+                                root.completion-index = 1;
+                                root.completion-selected(root.completion-2);
+                                command-input.caret-to-end();
+                            }
                         }
                     }
-                    if root.completion-3 != "": Text {
-                        text: "> " + root.completion-3;
-                        color: completion-touch-3.has-hover ? BlobTheme.accent : BlobTheme.text-muted;
-                        font-size: 8px;
+                    if root.completion-3 != "": Rectangle {
+                        height: 20px;
+                        background: root.completion-index == 2 ? BlobTheme.accent-soft : completion-touch-3.has-hover ? BlobTheme.surface-raised : transparent;
+                        Text { x: 4px; text: (root.completion-index == 2 ? "▶ " : "  ") + root.completion-3; color: root.completion-index == 2 ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
                         completion-touch-3 := TouchArea {
                             mouse-cursor: pointer;
-                            clicked => { root.completion-selected(root.completion-3); command-input.focus(); }
+                            clicked => {
+                                root.command-text = root.completion-3;
+                                root.completion-index = 2;
+                                root.completion-selected(root.completion-3);
+                                command-input.caret-to-end();
+                            }
                         }
                     }
                     Text {
                         text: "[ask AI about this " + root.command-level + "]";
                         color: ask-ai-touch.has-hover ? BlobTheme.accent-secondary : BlobTheme.text-faint;
-                        font-size: 8px;
+                        font-size: BlobTheme.font-small;
                         ask-ai-touch := TouchArea {
                             mouse-cursor: pointer;
                             clicked => { root.ask-ai-about-command(root.command-text); ai-input.focus(); }
