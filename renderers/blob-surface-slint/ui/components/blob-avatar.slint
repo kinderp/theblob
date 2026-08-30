@@ -23,11 +23,9 @@ export component BlobAvatar inherits Rectangle {
         : root.action;
 
     width: 224px;
-    height: 250px;
+    height: 254px;
     background: transparent;
 
-    // Semantic actions change cadence and pose even before dedicated state
-    // frames land. This remains event-driven and deliberately low frequency.
     Timer {
         interval: root.effective-action == "warning" ? 620ms
             : root.effective-action == "busy" ? 1150ms
@@ -135,25 +133,25 @@ export component BlobAvatar inherits Rectangle {
     }
 
     Text {
-        x: 14px;
-        y: 208px;
-        width: 196px;
-        height: 21px;
+        x: 10px;
+        y: 207px;
+        width: 204px;
+        height: 23px;
         text: root.name;
         color: root.focused ? root.blob-color : BlobTheme.text-muted;
-        font-size: 13px;
+        font-size: BlobTheme.font-label;
         font-weight: root.focused ? 600 : 500;
         horizontal-alignment: center;
     }
 
     Text {
-        x: 14px;
-        y: 230px;
-        width: 196px;
-        height: 18px;
+        x: 8px;
+        y: 231px;
+        width: 208px;
+        height: 21px;
         text: root.role + " · " + root.effective-action + (root.status == "" ? "" : " · " + root.status);
         color: root.effective-action == "warning" ? BlobTheme.warning : BlobTheme.text-faint;
-        font-size: 9px;
+        font-size: BlobTheme.font-small;
         horizontal-alignment: center;
     }
 
