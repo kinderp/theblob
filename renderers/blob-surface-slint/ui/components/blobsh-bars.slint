@@ -1,5 +1,51 @@
 import { BlobTheme } from "../design/tokens.slint";
 
+// Low-level terminal-like editor used by both Blobsh bars. Text and the native
+// blinking caret share the same vertically centered TextInput. The wrapper clips
+// overflow and follows the caret horizontally so long expert commands remain
+// editable on small screens.
+component BlobshLineEditor inherits Rectangle {
+    in-out property <string> text: "";
+    in property <brush> text-color: BlobTheme.text;
+    callback accepted;
+    callback edited;
+
+    private property <length> caret-margin: 8px;
+    forward-focus: editor;
+    background: transparent;
+    clip: true;
+
+    editor := TextInput {
+        x: 0px;
+        y: 0px;
+        height: parent.height;
+        width: max(parent.width, self.preferred-width + 4px);
+        text <=> root.text;
+        color: root.text-color;
+        selection-background-color: BlobTheme.accent-soft;
+        font-size: 11px;
+        font-family: "Menlo";
+        vertical-alignment: center;
+        text-cursor-width: 2px;
+        single-line: true;
+
+        cursor-position-changed(position) => {
+            if (position.x + self.x < root.caret-margin) {
+                self.x = -position.x + root.caret-margin;
+            } else if (position.x + self.x > parent.width - root.caret-margin - self.text-cursor-width) {
+                self.x = parent.width - position.x - root.caret-margin - self.text-cursor-width;
+            } else if (self.preferred-width <= parent.width) {
+                self.x = 0px;
+            }
+        }
+        edited => {
+            if (self.preferred-width <= parent.width) { self.x = 0px; }
+            root.edited();
+        }
+        accepted => { root.accepted(); }
+    }
+}
+
 export component BlobshBars inherits Rectangle {
     in-out property <string> prompt-text: "";
     in property <string> prompt-status: "ask The Blob";
@@ -96,17 +142,11 @@ export component BlobshBars inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                ai-input := TextInput {
+                ai-input := BlobshLineEditor {
                     visible: !root.ai-collapsed;
                     horizontal-stretch: 1;
                     text <=> root.prompt-text;
-                    color: BlobTheme.text;
-                    selection-background-color: BlobTheme.accent-soft;
-                    font-size: 11px;
-                    font-family: "Menlo";
-                    vertical-alignment: center;
-                    text-cursor-width: 2px;
-                    single-line: true;
+                    text-color: BlobTheme.text;
                     accepted => { root.submit-prompt(root.prompt-text); }
                 }
 
@@ -175,17 +215,11 @@ export component BlobshBars inherits Rectangle {
                     deeper := TouchArea { mouse-cursor: pointer; clicked => { root.command-deeper(); } }
                 }
 
-                command-input := TextInput {
+                command-input := BlobshLineEditor {
                     visible: !root.command-collapsed;
                     horizontal-stretch: 1;
                     text <=> root.command-text;
-                    color: BlobTheme.text;
-                    selection-background-color: BlobTheme.accent-soft;
-                    font-size: 11px;
-                    font-family: "Menlo";
-                    vertical-alignment: center;
-                    text-cursor-width: 2px;
-                    single-line: true;
+                    text-color: BlobTheme.text;
                     edited => {
                         root.command-edited(root.command-text);
                         root.copilot-open = true;
