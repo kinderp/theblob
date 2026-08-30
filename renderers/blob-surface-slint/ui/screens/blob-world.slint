@@ -38,7 +38,7 @@ export component BlobWorld inherits Rectangle {
         spacing: 0px;
 
         Rectangle {
-            height: 278px;
+            height: 286px;
             background: #090d11;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
@@ -51,11 +51,11 @@ export component BlobWorld inherits Rectangle {
                 spacing: 2px;
 
                 HorizontalLayout {
-                    height: 18px;
-                    Text { text: ":: workspace-presence"; color: BlobTheme.text-faint; font-size: 8px; vertical-alignment: center; }
+                    height: 22px;
+                    Text { text: ":: workspace-presence"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
                     Rectangle { horizontal-stretch: 1; background: transparent; }
-                    Text { text: "avatar-renderer=" + root.blob-style; color: BlobTheme.text-faint; font-size: 8px; vertical-alignment: center; }
-                    Text { text: root.expanded-workspace < 0 ? "mode=world" : "mode=world+surfaces"; color: BlobTheme.text-faint; font-size: 8px; vertical-alignment: center; }
+                    Text { text: "avatar-renderer=" + root.blob-style; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
+                    Text { text: root.expanded-workspace < 0 ? "mode=world" : "mode=world+surfaces"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
                 }
 
                 HorizontalLayout {
@@ -75,8 +75,8 @@ export component BlobWorld inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 spacing: BlobTheme.space-3;
-                Text { text: "select a workspace to unfold its semantic surfaces"; color: BlobTheme.text-muted; font-size: 10px; horizontal-alignment: center; }
-                Text { text: "click blob :: 1..4 focus :: cmd+t unfold :: ? explain"; color: BlobTheme.text-faint; font-size: 9px; horizontal-alignment: center; }
+                Text { text: "select a workspace to unfold its semantic surfaces"; color: BlobTheme.text-muted; font-size: BlobTheme.font-body; horizontal-alignment: center; }
+                Text { text: "click blob :: 1..4 focus :: cmd+t unfold :: ? explain"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; horizontal-alignment: center; }
             }
         }
 
@@ -85,7 +85,7 @@ export component BlobWorld inherits Rectangle {
             spacing: 0px;
 
             Rectangle {
-                height: 34px;
+                height: 40px;
                 background: #080b0e;
                 border-color: BlobTheme.border;
                 border-width: 1px;
@@ -96,15 +96,15 @@ export component BlobWorld inherits Rectangle {
                     Text {
                         text: root.expanded-workspace == 0 ? "[1] ROMEO" : root.expanded-workspace == 1 ? "[2] DOCS" : root.expanded-workspace == 2 ? "[3] SYSTEM" : "[4] NOTES";
                         color: root.expanded-workspace == 0 ? BlobTheme.dev : root.expanded-workspace == 1 ? BlobTheme.docs : root.expanded-workspace == 2 ? BlobTheme.system : BlobTheme.notes;
-                        font-size: 10px;
+                        font-size: BlobTheme.font-body;
                         font-weight: 600;
                         vertical-alignment: center;
                     }
-                    Text { text: ":: semantic surfaces :: placement=local :: instance=slint"; color: BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; }
+                    Text { text: ":: semantic surfaces :: placement=local :: instance=slint"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
                     Rectangle { horizontal-stretch: 1; background: transparent; }
-                    Text { text: "[why]"; color: why-touch.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 9px; vertical-alignment: center; why-touch := TouchArea { mouse-cursor: pointer; clicked => { root.explain-current(); } } }
-                    Text { text: "[details]"; color: details-touch.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 9px; vertical-alignment: center; details-touch := TouchArea { mouse-cursor: pointer; clicked => { root.show-details(); } } }
-                    Text { text: "[collapse]"; color: collapse-touch.has-hover ? BlobTheme.warning : BlobTheme.text-faint; font-size: 9px; vertical-alignment: center; collapse-touch := TouchArea { mouse-cursor: pointer; clicked => { root.collapse-workspaces(); } } }
+                    Text { text: "[why]"; color: why-touch.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; why-touch := TouchArea { mouse-cursor: pointer; clicked => { root.explain-current(); } } }
+                    Text { text: "[details]"; color: details-touch.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; details-touch := TouchArea { mouse-cursor: pointer; clicked => { root.show-details(); } } }
+                    Text { text: "[collapse]"; color: collapse-touch.has-hover ? BlobTheme.warning : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; collapse-touch := TouchArea { mouse-cursor: pointer; clicked => { root.collapse-workspaces(); } } }
                 }
             }
 
@@ -178,14 +178,14 @@ export component BlobWorld inherits Rectangle {
                     VerticalLayout {
                         spacing: 0px;
                         Rectangle {
-                            height: 27px;
+                            height: 34px;
                             background: #080b0e;
                             border-color: BlobTheme.border-soft;
                             border-width: 1px;
                             HorizontalLayout {
                                 padding-left: BlobTheme.space-3;
                                 padding-right: BlobTheme.space-3;
-                                Text { text: "CONTROLS"; color: BlobTheme.system; font-size: 10px; font-weight: 600; vertical-alignment: center; }
+                                Text { text: "CONTROLS"; color: BlobTheme.system; font-size: BlobTheme.font-body; font-weight: 600; vertical-alignment: center; }
                                 Rectangle { horizontal-stretch: 1; background: transparent; }
                                 BlobStatus { label: root.bluetooth-enabled ? "ON" : "OFF"; positive: root.bluetooth-enabled; }
                             }
@@ -193,8 +193,8 @@ export component BlobWorld inherits Rectangle {
                         VerticalLayout {
                             padding: BlobTheme.space-4;
                             spacing: BlobTheme.space-3;
-                            Text { text: "bluetooth"; color: BlobTheme.text; font-size: 14px; font-weight: 600; }
-                            Text { text: root.bluetooth-label; color: BlobTheme.text-muted; font-size: 10px; }
+                            Text { text: "bluetooth"; color: BlobTheme.text; font-size: BlobTheme.font-title; font-weight: 600; }
+                            Text { text: root.bluetooth-label; color: BlobTheme.text-muted; font-size: BlobTheme.font-body; }
                             BlobAction { label: root.proposal-pending ? "proposal prepared" : "enable bluetooth"; clicked => { if (!root.proposal-pending) { root.system-propose-bluetooth(); } } }
                             if root.proposal-pending: Rectangle {
                                 vertical-stretch: 1;
@@ -205,10 +205,10 @@ export component BlobWorld inherits Rectangle {
                                 VerticalLayout {
                                     padding: BlobTheme.space-3;
                                     spacing: BlobTheme.space-2;
-                                    Text { text: root.proposal-title; color: BlobTheme.warning; font-size: 10px; font-weight: 600; }
-                                    Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: 9px; wrap: word-wrap; }
-                                    Text { text: root.proposal-diff; color: BlobTheme.system; font-size: 9px; wrap: word-wrap; }
-                                    Text { text: "baseline stays OFF until backend + authority complete"; color: BlobTheme.text-faint; font-size: 8px; wrap: word-wrap; }
+                                    Text { text: root.proposal-title; color: BlobTheme.warning; font-size: BlobTheme.font-body; font-weight: 600; }
+                                    Text { text: root.proposal-summary; color: BlobTheme.text-muted; font-size: BlobTheme.font-small; wrap: word-wrap; }
+                                    Text { text: root.proposal-diff; color: BlobTheme.system; font-size: BlobTheme.font-small; wrap: word-wrap; }
+                                    Text { text: "baseline stays OFF until backend + authority complete"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; wrap: word-wrap; }
                                 }
                             }
                             if root.proposal-pending: BlobAction { label: "clear proposal"; clicked => { root.system-clear-proposal(); } }
