@@ -25,6 +25,47 @@ export component BlobshBars inherits Rectangle {
     callback command-shallower;
     callback command-deeper;
 
+    private property <string> inferred-title: root.command-level == "1/6 USER" ? "USER · original request"
+        : root.command-level == "2/6 INTENT" ? "INTENT · canonical Blob command"
+        : root.command-level == "3/6 PLAN" ? "PLAN · resolved execution intent"
+        : root.command-level == "4/6 SPEC" ? "SPEC · semantic desired state"
+        : root.command-level == "5/6 BACKEND" ? "BACKEND · platform materialization"
+        : "NATIVE · concrete machine operation";
+    private property <string> inferred-body: root.command-level == "1/6 USER" ? "What you asked for. Edit here to reinterpret the request and regenerate deeper levels."
+        : root.command-level == "2/6 INTENT" ? "The precise command The Blob understood. This is the safest expert editing point in P0."
+        : root.command-level == "3/6 PLAN" ? "Capability, placement and authority choices derived from the intent."
+        : root.command-level == "4/6 SPEC" ? "Semantic state change. For Bluetooth the demo deliberately stops here until a real backend materializes more."
+        : root.command-level == "5/6 BACKEND" ? "Platform-specific representation produced by a deterministic adapter. Never fabricated by the UI."
+        : "Lowest concrete operation available: shell, D-Bus, API, filesystem transaction, RPC or another native mechanism.";
+    private property <string> inferred-source: root.command-level == "2/6 INTENT" ? "Blobsh command schema · docs/BLOBSH-v0.1.md"
+        : root.command-level == "4/6 SPEC" ? "SystemSpec / semantic proposal"
+        : "Blobsh trace contract · docs/BLOBSH-v0.1.md";
+
+    // P0 completion is intentionally conservative: only commands the current
+    // deterministic demo actually understands are offered. Platform/backend
+    // flags arrive only when their real parser/materializer exists.
+    private property <string> fallback-completion-1: root.command-level != "2/6 INTENT" ? ""
+        : root.command-text == "workspace.open romeo" ? "workspace.open docs"
+        : root.command-text == "workspace.open docs" ? "workspace.open system"
+        : root.command-text == "workspace.open system" ? "workspace.open notes"
+        : "system.bluetooth enable";
+    private property <string> fallback-completion-2: root.command-level != "2/6 INTENT" ? ""
+        : root.command-text == "workspace.open romeo" ? "workspace.open system"
+        : root.command-text == "workspace.open docs" ? "workspace.open notes"
+        : root.command-text == "system.bluetooth enable" ? "workspace.open system"
+        : "technician.explain current";
+    private property <string> fallback-completion-3: root.command-level != "2/6 INTENT" ? ""
+        : root.command-text == "workspace.open romeo" ? "workspace.open notes"
+        : root.command-text == "system.bluetooth enable" ? "technician.explain current"
+        : "workspace.collapse all";
+
+    private property <string> shown-title: root.copilot-title == "Command Copilot" ? root.inferred-title : root.copilot-title;
+    private property <string> shown-body: root.copilot-body == "Edit the BLOB command directly or ask the AI for help." ? root.inferred-body : root.copilot-body;
+    private property <string> shown-source: root.copilot-source == "Blobsh schema" ? root.inferred-source : root.copilot-source;
+    private property <string> shown-completion-1: root.completion-1 == "" ? root.fallback-completion-1 : root.completion-1;
+    private property <string> shown-completion-2: root.completion-2 == "" ? root.fallback-completion-2 : root.completion-2;
+    private property <string> shown-completion-3: root.completion-3 == "" ? root.fallback-completion-3 : root.completion-3;
+
     forward-focus: ai-input;
     init => { ai-input.focus(); }
 
@@ -210,19 +251,31 @@ export component BlobshBars inherits Rectangle {
                 VerticalLayout {
                     horizontal-stretch: 3;
                     spacing: 3px;
-                    Text { text: root.copilot-title; color: BlobTheme.accent; font-size: 9px; font-weight: 600; }
-                    Text { text: root.copilot-body; color: BlobTheme.text-muted; font-size: 8px; wrap: word-wrap; }
-                    Text { text: "source: " + root.copilot-source; color: BlobTheme.text-faint; font-size: 7px; }
+                    Text { text: root.shown-title; color: BlobTheme.accent; font-size: 9px; font-weight: 600; }
+                    Text { text: root.shown-body; color: BlobTheme.text-muted; font-size: 8px; wrap: word-wrap; }
+                    Text { text: "source: " + root.shown-source; color: BlobTheme.text-faint; font-size: 7px; }
                 }
 
                 VerticalLayout {
                     horizontal-stretch: 2;
                     spacing: 2px;
-                    Text { text: "COMPLETION"; color: BlobTheme.text-faint; font-size: 7px; }
-                    if root.completion-1 != "": Text { text: "> " + root.completion-1; color: completion-touch-1.has-hover ? BlobTheme.accent : BlobTheme.text; font-size: 8px; completion-touch-1 := TouchArea { mouse-cursor: pointer; clicked => { root.completion-selected(root.completion-1); command-input.focus(); } } }
-                    if root.completion-2 != "": Text { text: "> " + root.completion-2; color: completion-touch-2.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 8px; completion-touch-2 := TouchArea { mouse-cursor: pointer; clicked => { root.completion-selected(root.completion-2); command-input.focus(); } } }
-                    if root.completion-3 != "": Text { text: "> " + root.completion-3; color: completion-touch-3.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 8px; completion-touch-3 := TouchArea { mouse-cursor: pointer; clicked => { root.completion-selected(root.completion-3); command-input.focus(); } } }
-                    Text { text: "[ask AI about this command]"; color: ask-ai-touch.has-hover ? BlobTheme.accent-secondary : BlobTheme.text-faint; font-size: 8px; ask-ai-touch := TouchArea { mouse-cursor: pointer; clicked => { root.ask-ai-about-command(root.command-text); ai-input.focus(); } } }
+                    Text { text: root.command-level == "2/6 INTENT" ? "COMPLETION · valid P0 commands" : "COMPLETION · none at this materialized level"; color: BlobTheme.text-faint; font-size: 7px; }
+                    if root.shown-completion-1 != "": Text { text: "> " + root.shown-completion-1; color: completion-touch-1.has-hover ? BlobTheme.accent : BlobTheme.text; font-size: 8px; completion-touch-1 := TouchArea { mouse-cursor: pointer; clicked => { root.command-text = root.shown-completion-1; root.command-edited(root.command-text); root.completion-selected(root.command-text); command-input.focus(); } } }
+                    if root.shown-completion-2 != "": Text { text: "> " + root.shown-completion-2; color: completion-touch-2.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 8px; completion-touch-2 := TouchArea { mouse-cursor: pointer; clicked => { root.command-text = root.shown-completion-2; root.command-edited(root.command-text); root.completion-selected(root.command-text); command-input.focus(); } } }
+                    if root.shown-completion-3 != "": Text { text: "> " + root.shown-completion-3; color: completion-touch-3.has-hover ? BlobTheme.accent : BlobTheme.text-muted; font-size: 8px; completion-touch-3 := TouchArea { mouse-cursor: pointer; clicked => { root.command-text = root.shown-completion-3; root.command-edited(root.command-text); root.completion-selected(root.command-text); command-input.focus(); } } }
+                    Text {
+                        text: "[ask AI about this " + root.command-level + "]";
+                        color: ask-ai-touch.has-hover ? BlobTheme.accent-secondary : BlobTheme.text-faint;
+                        font-size: 8px;
+                        ask-ai-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.prompt-text = "Aiutami a capire o modificare " + root.command-level + ": " + root.command-text;
+                                root.ask-ai-about-command(root.command-text);
+                                ai-input.focus();
+                            }
+                        }
+                    }
                 }
             }
         }
