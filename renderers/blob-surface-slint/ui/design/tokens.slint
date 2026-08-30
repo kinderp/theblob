@@ -36,6 +36,15 @@ export global BlobTheme {
     in-out property <color> eye: #eef2f4;
     in-out property <color> cheek: #d77a8560;
 
+    // P0 typography scale. These are centralized now so a future config/theme
+    // layer can expose font scaling without rewriting individual components.
+    in-out property <length> font-micro: 10px;
+    in-out property <length> font-small: 11px;
+    in-out property <length> font-body: 13px;
+    in-out property <length> font-label: 14px;
+    in-out property <length> font-title: 16px;
+    in-out property <length> font-hero: 18px;
+
     in-out property <length> space-1: 4px;
     in-out property <length> space-2: 8px;
     in-out property <length> space-3: 12px;
@@ -54,4 +63,5 @@ export global BlobTheme {
     in-out property <length> technician-width: 340px;
     in-out property <length> header-height: 36px;
     in-out property <length> prompt-height: 48px;
+    in-out property <length> prompt-expanded-height: 104px;
 }
