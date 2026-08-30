@@ -19,14 +19,14 @@ export component BlobCard inherits Rectangle {
         Text {
             text: root.eyebrow;
             color: BlobTheme.text-faint;
-            font-size: 11px;
+            font-size: BlobTheme.font-body;
             font-weight: 700;
         }
 
         Text {
             text: root.title;
             color: BlobTheme.text;
-            font-size: 20px;
+            font-size: 22px;
             font-weight: 700;
             wrap: word-wrap;
         }
@@ -34,14 +34,14 @@ export component BlobCard inherits Rectangle {
         Text {
             text: root.body;
             color: BlobTheme.text-muted;
-            font-size: 14px;
+            font-size: BlobTheme.font-title;
             wrap: word-wrap;
         }
 
         Text {
             text: root.meta;
             color: BlobTheme.text-faint;
-            font-size: 12px;
+            font-size: BlobTheme.font-label;
             wrap: word-wrap;
         }
     }
@@ -52,7 +52,7 @@ export component BlobNavItem inherits Rectangle {
     in property <bool> selected: false;
     callback clicked;
 
-    height: 40px;
+    height: 44px;
     border-radius: BlobTheme.radius-md;
     background: selected ? BlobTheme.accent-soft : nav-area.has-hover ? BlobTheme.surface-raised : transparent;
 
@@ -61,7 +61,7 @@ export component BlobNavItem inherits Rectangle {
         vertical-alignment: center;
         text: root.label;
         color: selected ? BlobTheme.accent : BlobTheme.text-muted;
-        font-size: 14px;
+        font-size: BlobTheme.font-title;
         font-weight: selected ? 700 : 500;
     }
 
@@ -75,9 +75,9 @@ export component BlobStatus inherits Rectangle {
     in property <string> label;
     in property <bool> positive: false;
 
-    min-width: 82px;
-    height: 28px;
-    border-radius: 14px;
+    min-width: 90px;
+    height: 32px;
+    border-radius: 16px;
     background: positive ? BlobTheme.success-soft : BlobTheme.surface-raised;
     border-color: positive ? #cbe9d4 : BlobTheme.border-soft;
     border-width: 1px;
@@ -87,7 +87,7 @@ export component BlobStatus inherits Rectangle {
         vertical-alignment: center;
         text: root.label;
         color: positive ? BlobTheme.success : BlobTheme.text-muted;
-        font-size: 12px;
+        font-size: BlobTheme.font-label;
         font-weight: 600;
     }
 }
@@ -97,7 +97,7 @@ export component BlobAction inherits Rectangle {
     in property <bool> primary: false;
     callback clicked;
 
-    height: 38px;
+    height: 42px;
     border-radius: BlobTheme.radius-md;
     background: root.primary
         ? (action-area.has-hover ? #5849db : BlobTheme.accent)
@@ -110,7 +110,7 @@ export component BlobAction inherits Rectangle {
         vertical-alignment: center;
         text: root.label;
         color: root.primary ? #ffffff : BlobTheme.text;
-        font-size: 13px;
+        font-size: BlobTheme.font-label;
         font-weight: 600;
     }
 
