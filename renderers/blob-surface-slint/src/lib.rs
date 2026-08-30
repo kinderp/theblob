@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use blob_core::{FeatureState, SystemSpec};
 use blob_mvp::VerticalSliceOutcome;
+use blob_surface_app::character::{BlobAction, BlobBehaviorContext};
 use blob_surface_app::shell::BlobShellState;
 use blob_surface_app::{
     TechnicianEvidenceContext, TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
@@ -205,11 +206,34 @@ fn apply_shell_state(ui: &BlobShell, shell: &BlobShellState) {
     );
 }
 
+fn demo_character_actions(task_status: &str, system_problem: bool) -> [BlobAction; 4] {
+    let romeo = BlobBehaviorContext {
+        task_running: task_status != "Completed",
+        ..BlobBehaviorContext::calm()
+    }
+    .resolve();
+    let system = BlobBehaviorContext {
+        problem: system_problem,
+        ..BlobBehaviorContext::calm()
+    }
+    .resolve();
+
+    [romeo, BlobAction::Idle, system, BlobAction::Idle]
+}
+
+fn apply_character_actions(ui: &BlobShell, actions: [BlobAction; 4]) {
+    ui.set_romeo_action(actions[0].as_str().into());
+    ui.set_docs_action(actions[1].as_str().into());
+    ui.set_system_action(actions[2].as_str().into());
+    ui.set_notes_action(actions[3].as_str().into());
+}
+
 fn apply_bluetooth_proposal(ui: &BlobShell, proposal: &SystemWorkspaceProposal) {
     ui.set_system_proposal_pending(true);
     ui.set_system_proposal_title(proposal.title.clone().into());
     ui.set_system_proposal_summary(proposal.desired_outcome.clone().into());
     ui.set_system_proposal_diff(proposal.semantic_diff_lines().join(" · ").into());
+    ui.set_system_action(BlobAction::Warning.as_str().into());
     ui.set_overlay_open(true);
     ui.set_overlay_eyebrow("SYSTEM · PROPOSAL".into());
     ui.set_overlay_title("Bluetooth change proposed".into());
@@ -234,6 +258,7 @@ fn clear_system_proposal(ui: &BlobShell) {
     ui.set_system_proposal_title("".into());
     ui.set_system_proposal_summary("".into());
     ui.set_system_proposal_diff("".into());
+    ui.set_system_action(BlobAction::Idle.as_str().into());
 }
 
 fn execute_prompt(
@@ -301,6 +326,7 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     ui.set_binding_summary(snapshot.binding_summary.clone().into());
     ui.set_verifier_summary(snapshot.verifier_summary.clone().into());
     ui.set_execution_output(snapshot.execution_output.clone().into());
+    apply_character_actions(&ui, demo_character_actions(&snapshot.task_status, false));
 
     let system = SystemWorkspaceSurfaceSnapshot::demo();
     ui.set_bluetooth_enabled(system.bluetooth_enabled);
@@ -424,5 +450,27 @@ mod tests {
         assert_eq!(shell.workspaces.len(), 4);
         assert_eq!(shell.workspaces[0].title, "Romeo");
         assert_eq!(shell.workspaces[0].surface_instances.len(), 4);
+    }
+
+    #[test]
+    fn semantic_behavior_resolver_drives_demo_character_actions() {
+        assert_eq!(
+            demo_character_actions("Running", false),
+            [
+                BlobAction::Busy,
+                BlobAction::Idle,
+                BlobAction::Idle,
+                BlobAction::Idle,
+            ]
+        );
+        assert_eq!(
+            demo_character_actions("Completed", true),
+            [
+                BlobAction::Idle,
+                BlobAction::Idle,
+                BlobAction::Warning,
+                BlobAction::Idle,
+            ]
+        );
     }
 }
