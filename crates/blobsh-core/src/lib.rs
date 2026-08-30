@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod grammar;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlobshDepth {
     User,
