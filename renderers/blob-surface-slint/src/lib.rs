@@ -322,6 +322,8 @@ fn sync_blobsh_trace(ui: &BlobShell, trace: &BlobshCommandTrace) {
     ui.set_command_text(layer.text.clone().into());
     ui.set_command_level(trace.depth_indicator().into());
     ui.set_command_status(trace.status().as_str().into());
+    ui.set_command_can_shallower(trace.can_select_shallower());
+    ui.set_command_can_deeper(trace.can_select_deeper());
     refresh_copilot(ui, trace.active_depth(), &layer.text);
 }
 
@@ -330,14 +332,35 @@ fn preview_command_edit(
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
     raw: &str,
 ) {
-    let depth = trace_slot
-        .borrow()
-        .as_ref()
-        .map(BlobshCommandTrace::active_depth)
-        .unwrap_or(BlobshDepth::Intent);
-    refresh_copilot(ui, depth, raw);
+    if raw.trim().is_empty() {
+        refresh_copilot(ui, BlobshDepth::Intent, raw);
+        ui.set_command_level("INTENT · draft".into());
+        ui.set_command_status("editing".into());
+        ui.set_command_can_shallower(false);
+        ui.set_command_can_deeper(false);
+        ui.set_copilot_open(true);
+        return;
+    }
+
+    let mut slot = trace_slot.borrow_mut();
+    if slot.is_none() {
+        if let Ok(trace) = BlobshCommandTrace::from_direct_intent(raw.trim()) {
+            *slot = Some(trace);
+        }
+    } else if let Some(trace) = slot.as_mut() {
+        let depth = trace.active_depth();
+        if trace.active_layer().editable && trace.active_layer().text != raw.trim() {
+            let _ = trace.edit_layer(depth, raw.trim());
+        }
+    }
+
+    if let Some(trace) = slot.as_ref() {
+        sync_blobsh_trace(ui, trace);
+    } else {
+        refresh_copilot(ui, BlobshDepth::Intent, raw);
+        ui.set_command_status("editing".into());
+    }
     ui.set_copilot_open(true);
-    ui.set_command_status("editing".into());
 }
 
 fn select_completion(
@@ -347,7 +370,7 @@ fn select_completion(
 ) {
     ui.set_command_text(replacement.into());
     preview_command_edit(ui, trace_slot, replacement);
-    ui.set_prompt_status("completion inserted · review/edit · Enter to process".into());
+    ui.set_prompt_status("completion inserted · caret moved to end · review/edit · Enter to process".into());
 }
 
 fn ask_ai_about_command(
@@ -359,7 +382,7 @@ fn ask_ai_about_command(
         .borrow()
         .as_ref()
         .map(BlobshCommandTrace::depth_indicator)
-        .unwrap_or_else(|| "2/6 INTENT".into());
+        .unwrap_or_else(|| "INTENT · draft".into());
     ui.set_prompt_text(
         format!("Aiutami a capire o modificare {label}: {raw}").into(),
     );
@@ -399,7 +422,7 @@ fn prepare_prompt_trace(
     *trace_slot.borrow_mut() = Some(trace);
     ui.set_prompt_text("".into());
     ui.set_prompt_status(if recognized {
-        "AI translated the request · inspect/edit BLOB command · Enter to process".into()
+        "AI translated the request · ↑ returns to USER · inspect/edit INTENT · Enter to process".into()
     } else {
         "P0 translator cannot resolve this request yet · edit the BLOB command directly".into()
     });
@@ -412,21 +435,9 @@ fn ensure_expert_trace(
     if trace_slot.borrow().is_some() {
         return true;
     }
-    let Ok(mut trace) = BlobshCommandTrace::from_user_input(raw) else {
+    let Ok(trace) = BlobshCommandTrace::from_direct_intent(raw.trim()) else {
         return false;
     };
-    if trace
-        .append_layer(BlobshCommandLayer::new(
-            BlobshDepth::Intent,
-            raw.trim(),
-            true,
-            BlobshProvenance::UserEdited,
-        ))
-        .is_err()
-    {
-        return false;
-    }
-    trace.set_status(BlobshCommandStatus::Preview);
     *trace_slot.borrow_mut() = Some(trace);
     true
 }
@@ -453,7 +464,7 @@ fn execute_blob_command(
 
     if trace.active_depth() != BlobshDepth::Intent {
         ui.set_prompt_status(
-            "processing is anchored at INTENT in P0 · use ↑ to return to INTENT".into(),
+            "processing is anchored at INTENT in P0 · Alt+↑ or [↑] returns toward INTENT".into(),
         );
         return;
     }
@@ -507,8 +518,9 @@ fn execute_blob_command(
                 BlobshProvenance::Derived,
             ));
             trace.set_status(BlobshCommandStatus::ApprovalRequired);
+            let _ = trace.select_depth(BlobshDepth::Intent);
             ui.set_prompt_status(
-                "Bluetooth proposal reached SPEC · BACKEND/NATIVE not materialized in P0".into(),
+                "Bluetooth materialized PLAN + SPEC · stay on INTENT, then Alt+↓ / [↓] to drill down".into(),
             );
         }
         "technician.explain current" => {
@@ -545,7 +557,7 @@ fn move_command_depth(
 ) {
     let mut slot = trace_slot.borrow_mut();
     let Some(trace) = slot.as_mut() else {
-        ui.set_prompt_status("no command trace yet".into());
+        ui.set_prompt_status("no materialized command trace yet".into());
         return;
     };
 
@@ -563,6 +575,7 @@ fn move_command_depth(
         sync_blobsh_trace(ui, trace);
         ui.set_prompt_status(format!("Depth Inspector · {}", target.as_str()).into());
     } else {
+        sync_blobsh_trace(ui, trace);
         ui.set_prompt_status(
             format!(
                 "{} is not materialized yet · The Blob never invents a lower-level command",
