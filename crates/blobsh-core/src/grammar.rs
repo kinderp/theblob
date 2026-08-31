@@ -128,16 +128,18 @@ pub fn complete(depth: BlobshDepth, raw: &str) -> BlobshCompletionSet {
         );
     }
 
+    // Completion tokens deliberately do not carry trailing whitespace. A
+    // separator is user input and must stay visible/explicit in the editor.
     const WORKSPACE_VERBS: &[(&str, &str, &str, bool, &str)] = &[
         (
-            "workspace.open ",
+            "workspace.open",
             "open",
             "Open/focus a named semantic Workspace.",
             true,
             "intent/workspace/open",
         ),
         (
-            "workspace.collapse ",
+            "workspace.collapse",
             "collapse",
             "Collapse an expanded Workspace presentation.",
             false,
@@ -216,7 +218,7 @@ pub fn complete(depth: BlobshDepth, raw: &str) -> BlobshCompletionSet {
     }
 
     const SYSTEM_CAPABILITIES: &[(&str, &str, &str, bool, &str)] = &[(
-        "system.bluetooth ",
+        "system.bluetooth",
         "bluetooth",
         "Inspect or propose Bluetooth state through SystemSpec.",
         true,
@@ -258,7 +260,7 @@ pub fn complete(depth: BlobshDepth, raw: &str) -> BlobshCompletionSet {
     }
 
     const TECHNICIAN_VERBS: &[(&str, &str, &str, bool, &str)] = &[(
-        "technician.explain ",
+        "technician.explain",
         "explain",
         "Explain current semantic evidence and causal context.",
         true,
@@ -300,7 +302,7 @@ pub fn complete(depth: BlobshDepth, raw: &str) -> BlobshCompletionSet {
     }
 
     const INSPECTOR_VERBS: &[(&str, &str, &str, bool, &str)] = &[(
-        "inspector.show ",
+        "inspector.show",
         "show",
         "Open read-only semantic evidence details.",
         true,
@@ -364,11 +366,11 @@ mod tests {
     fn workspace_namespace_completes_verbs_from_partial_prefixes() {
         assert_eq!(
             inserts(complete(BlobshDepth::Intent, "workspace.")),
-            vec!["workspace.open ", "workspace.collapse "]
+            vec!["workspace.open", "workspace.collapse"]
         );
         assert_eq!(
             inserts(complete(BlobshDepth::Intent, "workspace.c")),
-            vec!["workspace.collapse "]
+            vec!["workspace.collapse"]
         );
     }
 
@@ -412,6 +414,15 @@ mod tests {
                 .items
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn completion_tokens_never_hide_trailing_whitespace() {
+        for raw in ["workspace.", "system.", "technician.", "inspector."] {
+            for completion in inserts(complete(BlobshDepth::Intent, raw)) {
+                assert_eq!(completion, completion.trim_end());
+            }
+        }
     }
 
     #[test]
