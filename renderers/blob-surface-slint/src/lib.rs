@@ -332,34 +332,30 @@ fn preview_command_edit(
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
     raw: &str,
 ) {
-    if raw.trim().is_empty() {
-        refresh_copilot(ui, BlobshDepth::Intent, raw);
-        ui.set_command_level("INTENT · draft".into());
-        ui.set_command_status("editing".into());
-        ui.set_command_can_shallower(false);
-        ui.set_command_can_deeper(false);
-        ui.set_copilot_open(true);
-        return;
-    }
+    // Editing is a draft operation. Do not trim, normalize or write the draft
+    // back into the materialized trace on every keystroke: doing so destroys
+    // meaningful trailing whitespace while the user is still composing a
+    // command (for example `workspace.open ` before the target is typed).
+    // The draft is committed to the INTENT layer only when Enter processes it.
+    let slot = trace_slot.borrow();
+    let depth = slot
+        .as_ref()
+        .map(BlobshCommandTrace::active_depth)
+        .unwrap_or(BlobshDepth::Intent);
 
-    let mut slot = trace_slot.borrow_mut();
-    if slot.is_none() {
-        if let Ok(trace) = BlobshCommandTrace::from_direct_intent(raw.trim()) {
-            *slot = Some(trace);
-        }
-    } else if let Some(trace) = slot.as_mut() {
-        let depth = trace.active_depth();
-        if trace.active_layer().editable && trace.active_layer().text != raw.trim() {
-            let _ = trace.edit_layer(depth, raw.trim());
-        }
-    }
+    refresh_copilot(ui, depth, raw);
 
     if let Some(trace) = slot.as_ref() {
-        sync_blobsh_trace(ui, trace);
+        ui.set_command_level(trace.depth_indicator().into());
+        ui.set_command_can_shallower(trace.can_select_shallower());
+        ui.set_command_can_deeper(trace.can_select_deeper());
     } else {
-        refresh_copilot(ui, BlobshDepth::Intent, raw);
-        ui.set_command_status("editing".into());
+        ui.set_command_level("INTENT · draft".into());
+        ui.set_command_can_shallower(false);
+        ui.set_command_can_deeper(false);
     }
+
+    ui.set_command_status("editing".into());
     ui.set_copilot_open(true);
 }
 
