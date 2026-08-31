@@ -51,7 +51,7 @@ component BlobshLineEditor inherits Rectangle {
         editor.focus();
     }
 
-    private function append-newline() {
+    public function append-newline() {
         if (!root.expanded) {
             root.request-expand();
         }
@@ -269,8 +269,6 @@ export component BlobshBars inherits Rectangle {
                 padding-bottom: root.command-collapsed ? 0px : 8px;
                 spacing: BlobTheme.space-2;
 
-                // Keep the command chrome compact and stable so the completion
-                // popup below can align under the editable text area.
                 Rectangle {
                     width: 232px;
                     background: transparent;
@@ -405,8 +403,6 @@ export component BlobshBars inherits Rectangle {
             }
         }
 
-        // Completion behaves like a normal editor dropdown: it appears directly
-        // below the command text instead of occupying a full-width dashboard row.
         if root.copilot-open: HorizontalLayout {
             height: root.completion-popup-height;
             spacing: 0px;
