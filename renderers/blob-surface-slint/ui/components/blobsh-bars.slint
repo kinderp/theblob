@@ -47,10 +47,6 @@ component BlobshLineEditor inherits Rectangle {
         editor.focus();
     }
 
-    public function focus() {
-        editor.focus();
-    }
-
     public function append-newline() {
         if (!root.expanded) {
             root.request-expand();
@@ -115,12 +111,6 @@ component BlobshLineEditor inherits Rectangle {
                     root.depth-shallower();
                     accept
                 } else if ((event.modifiers.control || event.modifiers.alt) && event.text == Key.DownArrow) {
-                    root.depth-deeper();
-                    accept
-                } else if (event.text == Key.PageUp) {
-                    root.depth-shallower();
-                    accept
-                } else if (event.text == Key.PageDown) {
                     root.depth-deeper();
                     accept
                 } else if (root.completion-open && event.text == Key.UpArrow) {
