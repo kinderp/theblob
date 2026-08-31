@@ -1,16 +1,15 @@
 import { BlobTheme } from "../design/tokens.slint";
 import { ScrollView } from "std-widgets.slint";
 
-// Terminal-like editor shared by both Blobsh bars. Compact mode is a single
-// line; expanded mode is multiline and vertically scrollable. Completion keys
-// and depth keys are deliberately disjoint. The native caret is deliberately
-// thicker than a normal text cursor while preserving native blinking/IME.
+// Terminal-like editor shared by both Blobsh bars. The editor keeps native
+// TextInput selection/IME/caret behaviour, but owns Blobsh-specific shortcuts.
 component BlobshLineEditor inherits Rectangle {
     in-out property <string> text: "";
     in property <brush> text-color: BlobTheme.text;
     in property <bool> expanded: true;
     in property <bool> completion-open: false;
     in property <string> selected-completion: "";
+    in property <bool> depth-navigation-enabled: false;
 
     callback accepted;
     callback edited;
@@ -22,6 +21,8 @@ component BlobshLineEditor inherits Rectangle {
     callback depth-deeper;
     callback toggle-expanded;
     callback request-expand;
+    callback grow;
+    callback shrink;
 
     private property <length> caret-margin: 10px;
     private property <length> line-height: BlobTheme.font-body + 8px;
@@ -30,8 +31,8 @@ component BlobshLineEditor inherits Rectangle {
     background: transparent;
     clip: true;
 
-    // Moving the caret in the next event-loop turn matters after completion:
-    // the two-way text binding must settle before offsets are computed.
+    // Completion changes the bound string programmatically. Moving the caret
+    // on the next event-loop turn avoids racing that two-way binding.
     Timer {
         interval: 1ms;
         running: root.caret-end-pending;
@@ -52,6 +53,15 @@ component BlobshLineEditor inherits Rectangle {
             root.request-expand();
         }
         root.text = root.text + "\n";
+        root.edited();
+        root.caret-to-end();
+    }
+
+    public function append-space() {
+        // Space is handled here instead of bubbling to ScrollView. This is
+        // intentionally optimized for the normal Blobsh completion flow where
+        // the caret is at the end of the completed token.
+        root.text = root.text + " ";
         root.edited();
         root.caret-to-end();
     }
@@ -105,12 +115,18 @@ component BlobshLineEditor inherits Rectangle {
 
             key-pressed(event) => {
                 // On macOS Slint maps Command to `control`; Option is `alt`.
-                // Both are accepted so the shortcut is discoverable on Mac and
-                // remains useful on other hosts.
-                if ((event.modifiers.control || event.modifiers.alt) && event.text == Key.UpArrow) {
+                // Shift+Command+arrows resize the active bar, while plain
+                // Command/Option+arrows traverse the semantic depth trace.
+                if (event.modifiers.control && event.modifiers.shift && event.text == Key.UpArrow) {
+                    root.grow();
+                    accept
+                } else if (event.modifiers.control && event.modifiers.shift && event.text == Key.DownArrow) {
+                    root.shrink();
+                    accept
+                } else if (root.depth-navigation-enabled && (event.modifiers.control || event.modifiers.alt) && event.text == Key.UpArrow) {
                     root.depth-shallower();
                     accept
-                } else if ((event.modifiers.control || event.modifiers.alt) && event.text == Key.DownArrow) {
+                } else if (root.depth-navigation-enabled && (event.modifiers.control || event.modifiers.alt) && event.text == Key.DownArrow) {
                     root.depth-deeper();
                     accept
                 } else if (root.completion-open && event.text == Key.UpArrow) {
@@ -125,6 +141,9 @@ component BlobshLineEditor inherits Rectangle {
                 } else if (event.text == Key.Escape && root.completion-open) {
                     root.close-completion();
                     accept
+                } else if (event.text == Key.Space) {
+                    root.append-space();
+                    accept
                 } else if (event.text == Key.Return && event.modifiers.control) {
                     root.toggle-expanded();
                     accept
@@ -135,8 +154,6 @@ component BlobshLineEditor inherits Rectangle {
                     root.accepted();
                     accept
                 } else {
-                    // Ordinary text — including spaces — must always reach the
-                    // native TextInput editor.
                     reject
                 }
             }
@@ -153,8 +170,7 @@ export component BlobshBars inherits Rectangle {
     in property <bool> can-shallower: false;
     in property <bool> can-deeper: false;
 
-    // `collapsed` means compact one-line mode, not hidden. Both bars remain
-    // usable at all times; expanded mode uses multiline editing + vertical scroll.
+    // `collapsed` means compact one-line mode, not hidden.
     in-out property <bool> ai-collapsed: false;
     in-out property <bool> command-collapsed: false;
 
@@ -180,25 +196,34 @@ export component BlobshBars inherits Rectangle {
         : root.completion-index == 1 ? root.completion-2
         : root.completion-index == 2 ? root.completion-3
         : root.completion-1;
-    private property <length> completion-popup-height: !root.copilot-open ? 0px
-        : root.completion-count == 0 ? 74px
-        : root.completion-count == 1 ? 94px
-        : root.completion-count == 2 ? 122px
-        : 150px;
+    private property <bool> completion-was-inserted: false;
+    private property <bool> manual-after-completion: false;
+
+    // Independent height steps are the precursor of a configurable layout spec.
+    // 0..4 roughly correspond to 3, 5, 7, 9 and 11 text rows.
+    private property <int> ai-size-step: 1;
+    private property <int> command-size-step: 1;
+    private property <length> ai-height: root.ai-collapsed ? 46px : 82px + root.ai-size-step * 28px;
+    private property <length> command-base-height: root.command-collapsed ? 46px : 82px + root.command-size-step * 28px;
+    private property <length> completion-popup-height: root.completion-count == 0 ? 70px
+        : root.completion-count == 1 ? 78px
+        : root.completion-count == 2 ? 105px
+        : 132px;
+    private property <length> command-height: root.copilot-open
+        ? max(root.command-base-height, root.completion-popup-height + 48px)
+        : root.command-base-height;
 
     forward-focus: ai-input;
     init => { ai-input.focus(); }
 
-    height: (root.ai-collapsed ? 46px : BlobTheme.prompt-expanded-height)
-        + (root.command-collapsed ? 46px : BlobTheme.prompt-expanded-height)
-        + root.completion-popup-height;
+    height: root.ai-height + root.command-height + 24px;
     background: #070a0d;
 
     VerticalLayout {
         spacing: 0px;
 
         Rectangle {
-            height: root.ai-collapsed ? 46px : BlobTheme.prompt-expanded-height;
+            height: root.ai-height;
             background: #070a0d;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
@@ -227,9 +252,55 @@ export component BlobshBars inherits Rectangle {
                         ai-input.focus();
                     }
                     request-expand => { root.ai-collapsed = false; }
+                    grow => {
+                        root.ai-collapsed = false;
+                        root.ai-size-step = min(4, root.ai-size-step + 1);
+                    }
+                    shrink => {
+                        if (root.ai-collapsed) {
+                            root.ai-collapsed = true;
+                        } else if (root.ai-size-step > 0) {
+                            root.ai-size-step -= 1;
+                        } else {
+                            root.ai-collapsed = true;
+                        }
+                    }
                     accepted => { root.submit-prompt(root.prompt-text); }
                 }
 
+                Text {
+                    text: "[-]";
+                    color: ai-minus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.ai-collapsed ? center : top;
+                    ai-minus := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            if (root.ai-collapsed) {
+                                root.ai-collapsed = true;
+                            } else if (root.ai-size-step > 0) {
+                                root.ai-size-step -= 1;
+                            } else {
+                                root.ai-collapsed = true;
+                            }
+                            ai-input.focus();
+                        }
+                    }
+                }
+                Text {
+                    text: "[+]";
+                    color: ai-plus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.ai-collapsed ? center : top;
+                    ai-plus := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.ai-collapsed = false;
+                            root.ai-size-step = min(4, root.ai-size-step + 1);
+                            ai-input.focus();
+                        }
+                    }
+                }
                 Text {
                     text: root.ai-collapsed ? "[↕]" : "[1L]";
                     color: ai-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
@@ -246,11 +317,12 @@ export component BlobshBars inherits Rectangle {
             }
         }
 
-        Rectangle {
-            height: root.command-collapsed ? 46px : BlobTheme.prompt-expanded-height;
+        command-bar := Rectangle {
+            height: root.command-height;
             background: #090d11;
             border-color: BlobTheme.border;
             border-width: 1px;
+            clip: false;
 
             HorizontalLayout {
                 padding-left: BlobTheme.space-3;
@@ -310,10 +382,22 @@ export component BlobshBars inherits Rectangle {
                     expanded: !root.command-collapsed;
                     completion-open: root.copilot-open && root.completion-count > 0;
                     selected-completion: root.selected-completion;
+                    depth-navigation-enabled: true;
+
                     edited => {
                         root.completion-index = 0;
                         root.command-edited(root.command-text);
-                        root.copilot-open = true;
+                        if (root.completion-was-inserted) {
+                            // The first manual keystroke after accepting a
+                            // completion means the user has taken control.
+                            root.completion-was-inserted = false;
+                            root.manual-after-completion = true;
+                            root.copilot-open = false;
+                        } else if (root.manual-after-completion) {
+                            root.copilot-open = false;
+                        } else {
+                            root.copilot-open = true;
+                        }
                     }
                     completion-previous => {
                         if (root.completion-count > 0) {
@@ -328,11 +412,16 @@ export component BlobshBars inherits Rectangle {
                     apply-completion(text) => {
                         root.command-text = text;
                         root.completion-index = 0;
+                        root.manual-after-completion = false;
+                        root.completion-was-inserted = true;
                         root.completion-selected(text);
                         command-input.caret-to-end();
                         root.copilot-open = true;
                     }
-                    close-completion => { root.copilot-open = false; }
+                    close-completion => {
+                        root.copilot-open = false;
+                        root.manual-after-completion = true;
+                    }
                     depth-shallower => { if (root.can-shallower) { root.command-shallower(); command-input.focus(); } }
                     depth-deeper => { if (root.can-deeper) { root.command-deeper(); command-input.focus(); } }
                     toggle-expanded => {
@@ -340,16 +429,29 @@ export component BlobshBars inherits Rectangle {
                         command-input.focus();
                     }
                     request-expand => { root.command-collapsed = false; }
+                    grow => {
+                        root.command-collapsed = false;
+                        root.command-size-step = min(4, root.command-size-step + 1);
+                    }
+                    shrink => {
+                        if (root.command-collapsed) {
+                            root.command-collapsed = true;
+                        } else if (root.command-size-step > 0) {
+                            root.command-size-step -= 1;
+                        } else {
+                            root.command-collapsed = true;
+                        }
+                    }
                     accepted => { root.submit-command(root.command-text); }
                 }
 
                 Rectangle {
-                    width: 142px;
+                    width: 184px;
                     background: transparent;
                     HorizontalLayout {
                         spacing: BlobTheme.space-2;
                         Text {
-                            visible: root.selected-completion != "";
+                            visible: root.selected-completion != "" && root.copilot-open;
                             text: "[Tab]";
                             color: BlobTheme.text-faint;
                             font-size: BlobTheme.font-micro;
@@ -363,8 +465,43 @@ export component BlobshBars inherits Rectangle {
                             copilot-touch := TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => {
+                                    root.manual-after-completion = false;
+                                    root.completion-was-inserted = false;
                                     root.copilot-open = !root.copilot-open;
                                     root.completion-index = 0;
+                                    command-input.focus();
+                                }
+                            }
+                        }
+                        Text {
+                            text: "[-]";
+                            color: command-minus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            command-minus := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if (root.command-collapsed) {
+                                        root.command-collapsed = true;
+                                    } else if (root.command-size-step > 0) {
+                                        root.command-size-step -= 1;
+                                    } else {
+                                        root.command-collapsed = true;
+                                    }
+                                    command-input.focus();
+                                }
+                            }
+                        }
+                        Text {
+                            text: "[+]";
+                            color: command-plus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            command-plus := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.command-collapsed = false;
+                                    root.command-size-step = min(4, root.command-size-step + 1);
                                     command-input.focus();
                                 }
                             }
@@ -391,16 +528,16 @@ export component BlobshBars inherits Rectangle {
                     }
                 }
             }
-        }
 
-        if root.copilot-open: HorizontalLayout {
-            height: root.completion-popup-height;
-            spacing: 0px;
-            Rectangle { width: 244px; background: #070a0d; }
-
-            Rectangle {
-                horizontal-stretch: 1;
-                background: #090d11;
+            // Floating completion overlay: it belongs to the BLOB editor and
+            // sits directly under the command text instead of becoming a third
+            // Shell bar.
+            if root.copilot-open: Rectangle {
+                x: 244px;
+                y: 38px;
+                width: max(280px, parent.width - 244px - 196px);
+                height: root.completion-popup-height;
+                background: #0a0f14ee;
                 border-color: BlobTheme.border;
                 border-width: 1px;
                 border-radius: BlobTheme.radius-md;
@@ -419,28 +556,20 @@ export component BlobshBars inherits Rectangle {
                             font-weight: 600;
                             overflow: elide;
                         }
-                        Text {
-                            text: "Esc close";
-                            color: BlobTheme.text-faint;
-                            font-size: BlobTheme.font-micro;
-                        }
+                        Text { text: "Esc"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; }
                     }
 
                     if root.completion-1 != "": Rectangle {
                         height: 25px;
                         background: root.completion-index == 0 ? BlobTheme.accent-soft : completion-touch-1.has-hover ? BlobTheme.surface-raised : transparent;
-                        Text {
-                            x: 5px;
-                            text: (root.completion-index == 0 ? "▶ " : "  ") + root.completion-1;
-                            color: root.completion-index == 0 ? BlobTheme.accent : BlobTheme.text;
-                            font-size: BlobTheme.font-small;
-                            vertical-alignment: center;
-                        }
+                        Text { x: 5px; text: (root.completion-index == 0 ? "▶ " : "  ") + root.completion-1; color: root.completion-index == 0 ? BlobTheme.accent : BlobTheme.text; font-size: BlobTheme.font-small; vertical-alignment: center; }
                         completion-touch-1 := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
                                 root.command-text = root.completion-1;
                                 root.completion-index = 0;
+                                root.manual-after-completion = false;
+                                root.completion-was-inserted = true;
                                 root.completion-selected(root.completion-1);
                                 command-input.caret-to-end();
                             }
@@ -449,18 +578,14 @@ export component BlobshBars inherits Rectangle {
                     if root.completion-2 != "": Rectangle {
                         height: 25px;
                         background: root.completion-index == 1 ? BlobTheme.accent-soft : completion-touch-2.has-hover ? BlobTheme.surface-raised : transparent;
-                        Text {
-                            x: 5px;
-                            text: (root.completion-index == 1 ? "▶ " : "  ") + root.completion-2;
-                            color: root.completion-index == 1 ? BlobTheme.accent : BlobTheme.text-muted;
-                            font-size: BlobTheme.font-small;
-                            vertical-alignment: center;
-                        }
+                        Text { x: 5px; text: (root.completion-index == 1 ? "▶ " : "  ") + root.completion-2; color: root.completion-index == 1 ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
                         completion-touch-2 := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
                                 root.command-text = root.completion-2;
                                 root.completion-index = 1;
+                                root.manual-after-completion = false;
+                                root.completion-was-inserted = true;
                                 root.completion-selected(root.completion-2);
                                 command-input.caret-to-end();
                             }
@@ -469,18 +594,14 @@ export component BlobshBars inherits Rectangle {
                     if root.completion-3 != "": Rectangle {
                         height: 25px;
                         background: root.completion-index == 2 ? BlobTheme.accent-soft : completion-touch-3.has-hover ? BlobTheme.surface-raised : transparent;
-                        Text {
-                            x: 5px;
-                            text: (root.completion-index == 2 ? "▶ " : "  ") + root.completion-3;
-                            color: root.completion-index == 2 ? BlobTheme.accent : BlobTheme.text-muted;
-                            font-size: BlobTheme.font-small;
-                            vertical-alignment: center;
-                        }
+                        Text { x: 5px; text: (root.completion-index == 2 ? "▶ " : "  ") + root.completion-3; color: root.completion-index == 2 ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
                         completion-touch-3 := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
                                 root.command-text = root.completion-3;
                                 root.completion-index = 2;
+                                root.manual-after-completion = false;
+                                root.completion-was-inserted = true;
                                 root.completion-selected(root.completion-3);
                                 command-input.caret-to-end();
                             }
@@ -495,12 +616,9 @@ export component BlobshBars inherits Rectangle {
                     }
 
                     HorizontalLayout {
-                        spacing: BlobTheme.space-2;
                         Text {
                             horizontal-stretch: 1;
-                            text: root.completion-count > 0
-                                ? "↑/↓ select · Tab insert · Enter process"
-                                : "no deterministic completion";
+                            text: root.completion-count > 0 ? "↑/↓ select · Tab insert" : "no deterministic completion";
                             color: BlobTheme.text-faint;
                             font-size: BlobTheme.font-micro;
                         }
@@ -516,8 +634,6 @@ export component BlobshBars inherits Rectangle {
                     }
                 }
             }
-
-            Rectangle { width: 154px; background: #070a0d; }
         }
 
         Rectangle {
@@ -528,7 +644,7 @@ export component BlobshBars inherits Rectangle {
             Text {
                 x: BlobTheme.space-3;
                 width: parent.width - 2 * BlobTheme.space-3;
-                text: "macOS: ⌘↑/⌘↓ (or Option↑/↓) depth · ↑/↓ completion · Tab insert · Enter process · Shift+Enter newline · ⌘Enter toggle 1L/multiline";
+                text: "macOS: ⌘↑/⌘↓ depth · ↑/↓ completion · Tab insert · Enter process · ⇧Enter newline · ⌘Enter 1L/multiline · ⌘⇧↑/↓ resize";
                 color: BlobTheme.text-faint;
                 font-size: BlobTheme.font-micro;
                 vertical-alignment: center;
