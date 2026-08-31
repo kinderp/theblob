@@ -209,15 +209,24 @@ export component BlobshBars inherits Rectangle {
         : root.completion-count == 1 ? 78px
         : root.completion-count == 2 ? 105px
         : 132px;
-    private property <length> command-height: root.copilot-open
-        ? max(root.command-base-height, root.completion-popup-height + 48px)
-        : root.command-base-height;
+
+    // The popup is a real overlay: opening it must never change the Shell's
+    // layout height. We first measure the room below the command baseline; if
+    // that cannot fit the popup, the menu flips upward over the AI/Workspace
+    // area instead. This mirrors editor/IDE completion menus.
+    private property <length> command-height: root.command-base-height;
+    private property <length> popup-space-below: max(0px, root.command-base-height - 42px);
+    private property <bool> popup-opens-up: root.popup-space-below < root.completion-popup-height;
+    private property <length> popup-y: root.popup-opens-up
+        ? 6px - root.completion-popup-height
+        : 38px;
 
     forward-focus: ai-input;
     init => { ai-input.focus(); }
 
     height: root.ai-height + root.command-height + 24px;
     background: #070a0d;
+    clip: false;
 
     VerticalLayout {
         spacing: 0px;
@@ -530,11 +539,11 @@ export component BlobshBars inherits Rectangle {
             }
 
             // Floating completion overlay: it belongs to the BLOB editor and
-            // sits directly under the command text instead of becoming a third
-            // Shell bar.
+            // is placement-aware. Compact bars normally flip it above the
+            // command row; sufficiently tall bars can keep it below.
             if root.copilot-open: Rectangle {
                 x: 244px;
-                y: 38px;
+                y: root.popup-y;
                 width: max(280px, parent.width - 244px - 196px);
                 height: root.completion-popup-height;
                 background: #0a0f14ee;
@@ -556,7 +565,11 @@ export component BlobshBars inherits Rectangle {
                             font-weight: 600;
                             overflow: elide;
                         }
-                        Text { text: "Esc"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; }
+                        Text {
+                            text: root.popup-opens-up ? "↑ above · Esc" : "↓ below · Esc";
+                            color: BlobTheme.text-faint;
+                            font-size: BlobTheme.font-micro;
+                        }
                     }
 
                     if root.completion-1 != "": Rectangle {
@@ -618,7 +631,9 @@ export component BlobshBars inherits Rectangle {
                     HorizontalLayout {
                         Text {
                             horizontal-stretch: 1;
-                            text: root.completion-count > 0 ? "↑/↓ select · Tab insert" : "no deterministic completion";
+                            text: root.completion-count > 0
+                                ? "↑/↓ navigate choices · Tab insert"
+                                : "no deterministic completion";
                             color: BlobTheme.text-faint;
                             font-size: BlobTheme.font-micro;
                         }
