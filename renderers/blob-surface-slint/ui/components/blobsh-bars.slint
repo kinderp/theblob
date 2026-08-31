@@ -58,9 +58,9 @@ component BlobshLineEditor inherits Rectangle {
     }
 
     public function append-space() {
-        // Space is handled here instead of bubbling to ScrollView. This is
-        // intentionally optimized for the normal Blobsh completion flow where
-        // the caret is at the end of the completed token.
+        // Some desktop backends report the physical space key as the literal
+        // Unicode string " ", while others use Key.Space. Both routes land
+        // here so ScrollView can never consume the separator after completion.
         root.text = root.text + " ";
         root.edited();
         root.caret-to-end();
@@ -141,7 +141,7 @@ component BlobshLineEditor inherits Rectangle {
                 } else if (event.text == Key.Escape && root.completion-open) {
                     root.close-completion();
                     accept
-                } else if (event.text == Key.Space) {
+                } else if (event.text == " " || event.text == Key.Space) {
                     root.append-space();
                     accept
                 } else if (event.text == Key.Return && event.modifiers.control) {
