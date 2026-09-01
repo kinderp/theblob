@@ -10,11 +10,13 @@ use blob_surface_app::shell::BlobShellState;
 use blob_surface_app::{
     TechnicianEvidenceContext, TechnicianIntent, TechnicianProjection, TechnicianProjectionError,
 };
-use blob_system_workspace::{demo_baseline_system_spec, SystemWorkspaceProposal};
-use blobsh_core::grammar::{complete as complete_blobsh, BlobshCompletionSet};
+use blob_system_workspace::{SystemWorkspaceProposal, demo_baseline_system_spec};
+use blobsh_core::grammar::{BlobshCompletionSet, complete as complete_blobsh};
 use blobsh_core::{
-    BlobshCommandLayer, BlobshCommandStatus, BlobshCommandTrace, BlobshDepth, BlobshProvenance,
+    BlobshCommandLayer, BlobshCommandStatus, BlobshCommandTrace, BlobshCompletionItem, BlobshDepth,
+    BlobshDraft, BlobshProvenance,
 };
+use slint::{ModelRc, VecModel};
 
 slint::include_modules!();
 
@@ -274,9 +276,7 @@ fn canonical_intent(raw: &str) -> (String, bool) {
         "bluetooth" | "enable bluetooth" | "attiva bluetooth" => {
             ("system.bluetooth enable".into(), true)
         }
-        "why" | "why?" | "explain" | "spiega" => {
-            ("technician.explain current".into(), true)
-        }
+        "why" | "why?" | "explain" | "spiega" => ("technician.explain current".into(), true),
         "details" | "dettagli" => ("inspector.show current".into(), true),
         "home" | "blob" => ("workspace.collapse all".into(), true),
         "" => (String::new(), false),
@@ -285,40 +285,35 @@ fn canonical_intent(raw: &str) -> (String, bool) {
 }
 
 fn sync_copilot(ui: &BlobShell, set: BlobshCompletionSet) {
+    let items = completion_entries(set.items);
     ui.set_copilot_title(set.subject.into());
     ui.set_copilot_body(set.explanation.into());
     ui.set_copilot_source(set.source.into());
 
-    let mut items = set.items.into_iter();
-    ui.set_completion_1(
-        items
-            .next()
-            .map(|item| item.insert_text)
-            .unwrap_or_default()
-            .into(),
-    );
-    ui.set_completion_2(
-        items
-            .next()
-            .map(|item| item.insert_text)
-            .unwrap_or_default()
-            .into(),
-    );
-    ui.set_completion_3(
-        items
-            .next()
-            .map(|item| item.insert_text)
-            .unwrap_or_default()
-            .into(),
-    );
+    ui.set_completions(ModelRc::new(VecModel::from(items)));
+    ui.set_completion_selected_index(0);
+    ui.set_completion_viewport_start(0);
+}
+
+fn completion_entries(items: Vec<BlobshCompletionItem>) -> Vec<BlobshCompletionEntry> {
+    items
+        .into_iter()
+        .map(|item| BlobshCompletionEntry {
+            insert_text: item.insert_text.into(),
+            label: item.label.into(),
+            explanation: item.explanation.into(),
+            recommended: item.recommended,
+        })
+        .collect()
 }
 
 fn refresh_copilot(ui: &BlobShell, depth: BlobshDepth, text: &str) {
     sync_copilot(ui, complete_blobsh(depth, text));
 }
 
-fn sync_blobsh_trace(ui: &BlobShell, trace: &BlobshCommandTrace) {
+fn sync_blobsh_trace(ui: &BlobShell, trace: &BlobshCommandTrace, draft: &mut BlobshDraft) {
     let layer = trace.active_layer();
+    draft.replace(layer.depth, layer.text.clone());
     ui.set_command_text(layer.text.clone().into());
     ui.set_command_level(trace.depth_indicator().into());
     ui.set_command_status(trace.status().as_str().into());
@@ -330,6 +325,7 @@ fn sync_blobsh_trace(ui: &BlobShell, trace: &BlobshCommandTrace) {
 fn preview_command_edit(
     ui: &BlobShell,
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    draft_slot: &Rc<RefCell<BlobshDraft>>,
     raw: &str,
 ) {
     // Editing is a draft operation. Do not trim, normalize or write the draft
@@ -342,6 +338,8 @@ fn preview_command_edit(
         .as_ref()
         .map(BlobshCommandTrace::active_depth)
         .unwrap_or(BlobshDepth::Intent);
+
+    draft_slot.borrow_mut().replace(depth, raw);
 
     refresh_copilot(ui, depth, raw);
 
@@ -362,11 +360,14 @@ fn preview_command_edit(
 fn select_completion(
     ui: &BlobShell,
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    draft_slot: &Rc<RefCell<BlobshDraft>>,
     replacement: &str,
 ) {
     ui.set_command_text(replacement.into());
-    preview_command_edit(ui, trace_slot, replacement);
-    ui.set_prompt_status("completion inserted · caret moved to end · review/edit · Enter to process".into());
+    preview_command_edit(ui, trace_slot, draft_slot, replacement);
+    ui.set_prompt_status(
+        "completion inserted · caret moved to end · review/edit · Enter to process".into(),
+    );
 }
 
 fn ask_ai_about_command(
@@ -379,9 +380,7 @@ fn ask_ai_about_command(
         .as_ref()
         .map(BlobshCommandTrace::depth_indicator)
         .unwrap_or_else(|| "INTENT · draft".into());
-    ui.set_prompt_text(
-        format!("Aiutami a capire o modificare {label}: {raw}").into(),
-    );
+    ui.set_prompt_text(format!("Aiutami a capire o modificare {label}: {raw}").into());
     ui.set_prompt_status(
         "AI assistance scoped to the current representation · edit the question, then Enter".into(),
     );
@@ -390,6 +389,7 @@ fn ask_ai_about_command(
 fn prepare_prompt_trace(
     ui: &BlobShell,
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    draft_slot: &Rc<RefCell<BlobshDraft>>,
     raw: &str,
 ) {
     if raw.trim().is_empty() {
@@ -414,20 +414,18 @@ fn prepare_prompt_trace(
         BlobshCommandStatus::Invalid
     });
 
-    sync_blobsh_trace(ui, &trace);
+    sync_blobsh_trace(ui, &trace, &mut draft_slot.borrow_mut());
     *trace_slot.borrow_mut() = Some(trace);
     ui.set_prompt_text("".into());
     ui.set_prompt_status(if recognized {
-        "AI translated the request · ↑ returns to USER · inspect/edit INTENT · Enter to process".into()
+        "AI translated the request · ↑ returns to USER · inspect/edit INTENT · Enter to process"
+            .into()
     } else {
         "P0 translator cannot resolve this request yet · edit the BLOB command directly".into()
     });
 }
 
-fn ensure_expert_trace(
-    trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
-    raw: &str,
-) -> bool {
+fn ensure_expert_trace(trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>, raw: &str) -> bool {
     if trace_slot.borrow().is_some() {
         return true;
     }
@@ -444,13 +442,18 @@ fn execute_blob_command(
     technician: &TechnicianProjectionSet,
     snapshot: &DevelopmentSurfaceSnapshot,
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    draft_slot: &Rc<RefCell<BlobshDraft>>,
     raw: &str,
 ) {
-    if raw.trim().is_empty() {
-        ui.set_prompt_status("BLOB command is empty".into());
-        return;
-    }
-    if !ensure_expert_trace(trace_slot, raw) {
+    draft_slot.borrow_mut().replace(BlobshDepth::Intent, raw);
+    let committed = match draft_slot.borrow().commit_text() {
+        Ok(text) => text.to_owned(),
+        Err(_) => {
+            ui.set_prompt_status("BLOB command is empty".into());
+            return;
+        }
+    };
+    if !ensure_expert_trace(trace_slot, &committed) {
         ui.set_prompt_status("cannot create an expert INTENT from an empty command".into());
         return;
     }
@@ -465,11 +468,11 @@ fn execute_blob_command(
         return;
     }
 
-    if trace.active_layer().text != raw.trim() {
-        let _ = trace.edit_layer(BlobshDepth::Intent, raw.trim());
+    if trace.active_layer().text != committed {
+        let _ = trace.edit_layer(BlobshDepth::Intent, &committed);
     }
 
-    let command = raw.trim().to_lowercase();
+    let command = committed.to_lowercase();
     match command.as_str() {
         "workspace.open romeo" => {
             shell.borrow_mut().toggle_single_workspace(0);
@@ -543,12 +546,13 @@ fn execute_blob_command(
         }
     }
 
-    sync_blobsh_trace(ui, trace);
+    sync_blobsh_trace(ui, trace, &mut draft_slot.borrow_mut());
 }
 
 fn move_command_depth(
     ui: &BlobShell,
     trace_slot: &Rc<RefCell<Option<BlobshCommandTrace>>>,
+    draft_slot: &Rc<RefCell<BlobshDraft>>,
     deeper: bool,
 ) {
     let mut slot = trace_slot.borrow_mut();
@@ -568,10 +572,10 @@ fn move_command_depth(
     };
 
     if trace.select_depth(target).is_ok() {
-        sync_blobsh_trace(ui, trace);
+        sync_blobsh_trace(ui, trace, &mut draft_slot.borrow_mut());
         ui.set_prompt_status(format!("Depth Inspector · {}", target.as_str()).into());
     } else {
-        sync_blobsh_trace(ui, trace);
+        sync_blobsh_trace(ui, trace, &mut draft_slot.borrow_mut());
         ui.set_prompt_status(
             format!(
                 "{} is not materialized yet · The Blob never invents a lower-level command",
@@ -598,10 +602,13 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     ui.set_pipewire_label(system.pipewire_label.clone().into());
     ui.set_printing_label(system.printing_label.clone().into());
 
-    let shell = Rc::new(RefCell::new(BlobShellState::demo_local("surface-host:macos-p0")));
+    let shell = Rc::new(RefCell::new(BlobShellState::demo_local(
+        "surface-host:macos-p0",
+    )));
     let technician = Rc::new(snapshot.technician.clone());
     let snapshot = Rc::new(snapshot.clone());
     let blobsh_trace = Rc::new(RefCell::new(None::<BlobshCommandTrace>));
+    let blobsh_draft = Rc::new(RefCell::new(BlobshDraft::new(BlobshDepth::Intent, "")));
     apply_shell_state(&ui, &shell.borrow());
 
     {
@@ -672,9 +679,10 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     {
         let weak = ui.as_weak();
         let blobsh_trace = Rc::clone(&blobsh_trace);
+        let blobsh_draft = Rc::clone(&blobsh_draft);
         ui.on_submit_prompt(move |prompt| {
             if let Some(ui) = weak.upgrade() {
-                prepare_prompt_trace(&ui, &blobsh_trace, prompt.as_str());
+                prepare_prompt_trace(&ui, &blobsh_trace, &blobsh_draft, prompt.as_str());
             }
         });
     }
@@ -684,6 +692,7 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
         let technician = Rc::clone(&technician);
         let snapshot = Rc::clone(&snapshot);
         let blobsh_trace = Rc::clone(&blobsh_trace);
+        let blobsh_draft = Rc::clone(&blobsh_draft);
         ui.on_submit_command(move |command| {
             if let Some(ui) = weak.upgrade() {
                 execute_blob_command(
@@ -692,6 +701,7 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
                     &technician,
                     &snapshot,
                     &blobsh_trace,
+                    &blobsh_draft,
                     command.as_str(),
                 );
             }
@@ -700,18 +710,20 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     {
         let weak = ui.as_weak();
         let blobsh_trace = Rc::clone(&blobsh_trace);
+        let blobsh_draft = Rc::clone(&blobsh_draft);
         ui.on_command_edited(move |command| {
             if let Some(ui) = weak.upgrade() {
-                preview_command_edit(&ui, &blobsh_trace, command.as_str());
+                preview_command_edit(&ui, &blobsh_trace, &blobsh_draft, command.as_str());
             }
         });
     }
     {
         let weak = ui.as_weak();
         let blobsh_trace = Rc::clone(&blobsh_trace);
+        let blobsh_draft = Rc::clone(&blobsh_draft);
         ui.on_completion_selected(move |completion| {
             if let Some(ui) = weak.upgrade() {
-                select_completion(&ui, &blobsh_trace, completion.as_str());
+                select_completion(&ui, &blobsh_trace, &blobsh_draft, completion.as_str());
             }
         });
     }
@@ -727,18 +739,20 @@ pub fn show(snapshot: &DevelopmentSurfaceSnapshot) -> Result<(), slint::Platform
     {
         let weak = ui.as_weak();
         let blobsh_trace = Rc::clone(&blobsh_trace);
+        let blobsh_draft = Rc::clone(&blobsh_draft);
         ui.on_command_shallower(move || {
             if let Some(ui) = weak.upgrade() {
-                move_command_depth(&ui, &blobsh_trace, false);
+                move_command_depth(&ui, &blobsh_trace, &blobsh_draft, false);
             }
         });
     }
     {
         let weak = ui.as_weak();
         let blobsh_trace = Rc::clone(&blobsh_trace);
+        let blobsh_draft = Rc::clone(&blobsh_draft);
         ui.on_command_deeper(move || {
             if let Some(ui) = weak.upgrade() {
-                move_command_depth(&ui, &blobsh_trace, true);
+                move_command_depth(&ui, &blobsh_trace, &blobsh_draft, true);
             }
         });
     }
@@ -826,5 +840,16 @@ mod tests {
         let set = complete_blobsh(BlobshDepth::Intent, "workspace.open s");
         assert_eq!(set.items.len(), 1);
         assert_eq!(set.items[0].insert_text, "workspace.open system");
+    }
+
+    #[test]
+    fn renderer_completion_model_keeps_every_core_item() {
+        let entries =
+            completion_entries(complete_blobsh(BlobshDepth::Intent, "workspace.open ").items);
+
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[0].label.as_str(), "romeo");
+        assert_eq!(entries[3].label.as_str(), "notes");
+        assert_eq!(entries[3].insert_text.as_str(), "workspace.open notes");
     }
 }

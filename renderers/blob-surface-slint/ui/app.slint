@@ -1,7 +1,7 @@
 import { BlobTheme } from "design/tokens.slint";
 import { BlobWorld } from "screens/blob-world.slint";
 import { ContextOverlay } from "components/context-overlay.slint";
-import { BlobshBars } from "components/blobsh-bars.slint";
+import { BlobshBars, BlobshCompletionEntry } from "components/blobsh-bars.slint";
 
 export component BlobShell inherits Window {
     in property <string> situation-summary;
@@ -42,9 +42,9 @@ export component BlobShell inherits Window {
     in property <string> copilot-title: "Command Copilot";
     in property <string> copilot-body: "Edit the BLOB command directly or ask the AI for help.";
     in property <string> copilot-source: "Blobsh schema";
-    in property <string> completion-1: "";
-    in property <string> completion-2: "";
-    in property <string> completion-3: "";
+    in property <[BlobshCompletionEntry]> completions;
+    in-out property <int> completion-selected-index: 0;
+    in-out property <int> completion-viewport-start: 0;
 
     in property <bool> overlay-open: false;
     in property <string> overlay-eyebrow: "TECHNICIAN";
@@ -218,9 +218,10 @@ export component BlobShell inherits Window {
             copilot-title: root.copilot-title;
             copilot-body: root.copilot-body;
             copilot-source: root.copilot-source;
-            completion-1: root.completion-1;
-            completion-2: root.completion-2;
-            completion-3: root.completion-3;
+            completions: root.completions;
+            completion-selected-index <=> root.completion-selected-index;
+            completion-viewport-start <=> root.completion-viewport-start;
+            window-height: root.height;
             submit-prompt(text) => { root.submit-prompt(text); }
             submit-command(text) => { root.submit-command(text); }
             command-edited(text) => { root.command-edited(text); }

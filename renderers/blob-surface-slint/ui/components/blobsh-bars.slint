@@ -1,6 +1,13 @@
 import { BlobTheme } from "../design/tokens.slint";
 import { ScrollView } from "std-widgets.slint";
 
+export struct BlobshCompletionEntry {
+    insert-text: string,
+    label: string,
+    explanation: string,
+    recommended: bool,
+}
+
 // Terminal-like editor shared by both Blobsh bars. The editor keeps native
 // TextInput selection/IME/caret behaviour, but owns Blobsh-specific shortcuts.
 component BlobshLineEditor inherits Rectangle {
@@ -53,15 +60,6 @@ component BlobshLineEditor inherits Rectangle {
             root.request-expand();
         }
         root.text = root.text + "\n";
-        root.edited();
-        root.caret-to-end();
-    }
-
-    public function append-space() {
-        // Some desktop backends report the physical space key as the literal
-        // Unicode string " ", while others use Key.Space. Both routes land
-        // here so ScrollView can never consume the separator after completion.
-        root.text = root.text + " ";
         root.edited();
         root.caret-to-end();
     }
@@ -141,9 +139,6 @@ component BlobshLineEditor inherits Rectangle {
                 } else if (event.text == Key.Escape && root.completion-open) {
                     root.close-completion();
                     accept
-                } else if (event.text == " " || event.text == Key.Space) {
-                    root.append-space();
-                    accept
                 } else if (event.text == Key.Return && event.modifiers.control) {
                     root.toggle-expanded();
                     accept
@@ -178,9 +173,10 @@ export component BlobshBars inherits Rectangle {
     in property <string> copilot-title: "INTENT · choose a command family";
     in property <string> copilot-body: "Start from a semantic namespace.";
     in property <string> copilot-source: "Blobsh P0 intent grammar";
-    in property <string> completion-1: "";
-    in property <string> completion-2: "";
-    in property <string> completion-3: "";
+    in property <[BlobshCompletionEntry]> completions;
+    in-out property <int> completion-selected-index: 0;
+    in-out property <int> completion-viewport-start: 0;
+    in property <length> window-height: 900px;
 
     callback submit-prompt(string);
     callback submit-command(string);
@@ -190,14 +186,9 @@ export component BlobshBars inherits Rectangle {
     callback command-shallower;
     callback command-deeper;
 
-    private property <int> completion-count: root.completion-3 != "" ? 3 : root.completion-2 != "" ? 2 : root.completion-1 != "" ? 1 : 0;
-    private property <int> completion-index: 0;
+    private property <int> completion-count: root.completions.length;
     private property <string> selected-completion: root.completion-count == 0 ? ""
-        : root.completion-index == 1 ? root.completion-2
-        : root.completion-index == 2 ? root.completion-3
-        : root.completion-1;
-    private property <bool> completion-was-inserted: false;
-    private property <bool> manual-after-completion: false;
+        : root.completions[min(root.completion-selected-index, root.completion-count - 1)].insert-text;
 
     // Independent height steps are the precursor of a configurable layout spec.
     // 0..4 roughly correspond to 3, 5, 7, 9 and 11 text rows.
@@ -205,18 +196,25 @@ export component BlobshBars inherits Rectangle {
     private property <int> command-size-step: 1;
     private property <length> ai-height: root.ai-collapsed ? 46px : 82px + root.ai-size-step * 28px;
     private property <length> command-base-height: root.command-collapsed ? 46px : 82px + root.command-size-step * 28px;
-    private property <length> completion-popup-height: root.completion-count == 0 ? 70px
-        : root.completion-count == 1 ? 78px
-        : root.completion-count == 2 ? 105px
-        : 132px;
-
-    // The popup is a real overlay: opening it must never change the Shell's
-    // layout height. We first measure the room below the command baseline; if
-    // that cannot fit the popup, the menu flips upward over the AI/Workspace
-    // area instead. This mirrors editor/IDE completion menus.
     private property <length> command-height: root.command-base-height;
-    private property <length> popup-space-below: max(0px, root.command-base-height - 42px);
-    private property <bool> popup-opens-up: root.popup-space-below < root.completion-popup-height;
+    private property <length> popup-space-below: max(0px, root.command-height - 22px);
+    private property <length> popup-space-above: max(0px, root.window-height - root.command-height - 26px);
+    private property <int> desired-row-count: min(3, root.completion-count);
+    private property <length> desired-popup-height: root.completion-count == 0 ? 70px
+        : 61px + root.desired-row-count * 28px + (root.completion-count > root.desired-row-count ? 26px : 0px);
+    private property <bool> popup-opens-up: root.popup-space-below < root.desired-popup-height
+        && root.popup-space-above >= root.popup-space-below;
+    private property <length> popup-available-space: root.popup-opens-up ? root.popup-space-above : root.popup-space-below;
+    private property <int> completion-visible-count: root.completion-count == 0 ? 0
+        : root.popup-available-space >= 171px ? min(3, root.completion-count)
+        : root.popup-available-space >= 143px ? min(2, root.completion-count)
+        : 1;
+    private property <bool> has-more-above: root.completion-viewport-start > 0;
+    private property <bool> has-more-below: root.completion-viewport-start + root.completion-visible-count < root.completion-count;
+    private property <length> completion-popup-height: root.completion-count == 0 ? min(70px, root.popup-available-space)
+        : 61px + root.completion-visible-count * 28px
+            + (root.has-more-above ? 13px : 0px)
+            + (root.has-more-below ? 13px : 0px);
     private property <length> popup-y: root.popup-opens-up
         ? 6px - root.completion-popup-height
         : 38px;
@@ -394,42 +392,41 @@ export component BlobshBars inherits Rectangle {
                     depth-navigation-enabled: true;
 
                     edited => {
-                        root.completion-index = 0;
+                        root.completion-selected-index = 0;
+                        root.completion-viewport-start = 0;
                         root.command-edited(root.command-text);
-                        if (root.completion-was-inserted) {
-                            // The first manual keystroke after accepting a
-                            // completion means the user has taken control.
-                            root.completion-was-inserted = false;
-                            root.manual-after-completion = true;
-                            root.copilot-open = false;
-                        } else if (root.manual-after-completion) {
-                            root.copilot-open = false;
-                        } else {
-                            root.copilot-open = true;
-                        }
+                        root.copilot-open = true;
                     }
                     completion-previous => {
                         if (root.completion-count > 0) {
-                            root.completion-index = root.completion-index <= 0 ? root.completion-count - 1 : root.completion-index - 1;
+                            root.completion-selected-index = root.completion-selected-index <= 0 ? root.completion-count - 1 : root.completion-selected-index - 1;
+                            if (root.completion-selected-index < root.completion-viewport-start) {
+                                root.completion-viewport-start = root.completion-selected-index;
+                            } else if (root.completion-selected-index >= root.completion-viewport-start + root.completion-visible-count) {
+                                root.completion-viewport-start = max(0, root.completion-selected-index - root.completion-visible-count + 1);
+                            }
                         }
                     }
                     completion-next => {
                         if (root.completion-count > 0) {
-                            root.completion-index = root.completion-index >= root.completion-count - 1 ? 0 : root.completion-index + 1;
+                            root.completion-selected-index = root.completion-selected-index >= root.completion-count - 1 ? 0 : root.completion-selected-index + 1;
+                            if (root.completion-selected-index < root.completion-viewport-start) {
+                                root.completion-viewport-start = root.completion-selected-index;
+                            } else if (root.completion-selected-index >= root.completion-viewport-start + root.completion-visible-count) {
+                                root.completion-viewport-start = max(0, root.completion-selected-index - root.completion-visible-count + 1);
+                            }
                         }
                     }
                     apply-completion(text) => {
                         root.command-text = text;
-                        root.completion-index = 0;
-                        root.manual-after-completion = false;
-                        root.completion-was-inserted = true;
+                        root.completion-selected-index = 0;
+                        root.completion-viewport-start = 0;
                         root.completion-selected(text);
                         command-input.caret-to-end();
                         root.copilot-open = true;
                     }
                     close-completion => {
                         root.copilot-open = false;
-                        root.manual-after-completion = true;
                     }
                     depth-shallower => { if (root.can-shallower) { root.command-shallower(); command-input.focus(); } }
                     depth-deeper => { if (root.can-deeper) { root.command-deeper(); command-input.focus(); } }
@@ -474,10 +471,9 @@ export component BlobshBars inherits Rectangle {
                             copilot-touch := TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => {
-                                    root.manual-after-completion = false;
-                                    root.completion-was-inserted = false;
                                     root.copilot-open = !root.copilot-open;
-                                    root.completion-index = 0;
+                                    root.completion-selected-index = 0;
+                                    root.completion-viewport-start = 0;
                                     command-input.focus();
                                 }
                             }
@@ -572,53 +568,43 @@ export component BlobshBars inherits Rectangle {
                         }
                     }
 
-                    if root.completion-1 != "": Rectangle {
-                        height: 25px;
-                        background: root.completion-index == 0 ? BlobTheme.accent-soft : completion-touch-1.has-hover ? BlobTheme.surface-raised : transparent;
-                        Text { x: 5px; text: (root.completion-index == 0 ? "▶ " : "  ") + root.completion-1; color: root.completion-index == 0 ? BlobTheme.accent : BlobTheme.text; font-size: BlobTheme.font-small; vertical-alignment: center; }
-                        completion-touch-1 := TouchArea {
+                    if root.has-more-above: Text {
+                        text: "▲ more";
+                        color: BlobTheme.text-faint;
+                        font-size: BlobTheme.font-micro;
+                        horizontal-alignment: center;
+                    }
+
+                    for item[index] in root.completions: Rectangle {
+                        visible: index >= root.completion-viewport-start
+                            && index < root.completion-viewport-start + root.completion-visible-count;
+                        height: self.visible ? 25px : 0px;
+                        background: root.completion-selected-index == index ? BlobTheme.accent-soft : completion-touch.has-hover ? BlobTheme.surface-raised : transparent;
+                        Text {
+                            x: 5px;
+                            text: (root.completion-selected-index == index ? "▶ " : "  ") + item.label;
+                            color: root.completion-selected-index == index ? BlobTheme.accent : BlobTheme.text-muted;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: center;
+                        }
+                        completion-touch := TouchArea {
+                            enabled: parent.visible;
                             mouse-cursor: pointer;
                             clicked => {
-                                root.command-text = root.completion-1;
-                                root.completion-index = 0;
-                                root.manual-after-completion = false;
-                                root.completion-was-inserted = true;
-                                root.completion-selected(root.completion-1);
+                                root.command-text = item.insert-text;
+                                root.completion-selected-index = index;
+                                root.completion-selected(item.insert-text);
                                 command-input.caret-to-end();
+                                root.copilot-open = true;
                             }
                         }
                     }
-                    if root.completion-2 != "": Rectangle {
-                        height: 25px;
-                        background: root.completion-index == 1 ? BlobTheme.accent-soft : completion-touch-2.has-hover ? BlobTheme.surface-raised : transparent;
-                        Text { x: 5px; text: (root.completion-index == 1 ? "▶ " : "  ") + root.completion-2; color: root.completion-index == 1 ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
-                        completion-touch-2 := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.command-text = root.completion-2;
-                                root.completion-index = 1;
-                                root.manual-after-completion = false;
-                                root.completion-was-inserted = true;
-                                root.completion-selected(root.completion-2);
-                                command-input.caret-to-end();
-                            }
-                        }
-                    }
-                    if root.completion-3 != "": Rectangle {
-                        height: 25px;
-                        background: root.completion-index == 2 ? BlobTheme.accent-soft : completion-touch-3.has-hover ? BlobTheme.surface-raised : transparent;
-                        Text { x: 5px; text: (root.completion-index == 2 ? "▶ " : "  ") + root.completion-3; color: root.completion-index == 2 ? BlobTheme.accent : BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
-                        completion-touch-3 := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.command-text = root.completion-3;
-                                root.completion-index = 2;
-                                root.manual-after-completion = false;
-                                root.completion-was-inserted = true;
-                                root.completion-selected(root.completion-3);
-                                command-input.caret-to-end();
-                            }
-                        }
+
+                    if root.has-more-below: Text {
+                        text: "▼ more";
+                        color: BlobTheme.text-faint;
+                        font-size: BlobTheme.font-micro;
+                        horizontal-alignment: center;
                     }
 
                     if root.completion-count == 0: Text {

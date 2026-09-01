@@ -165,6 +165,55 @@ pub struct BlobshContextHelp {
     pub documentation: Vec<BlobshDocRef>,
 }
 
+/// Exact, uncommitted editor text for one Blobsh representation.
+///
+/// A draft is deliberately not a command-trace layer. Frontends may replace
+/// it on every native editor event without normalizing whitespace or
+/// invalidating materialized descendants. Only an explicit process/commit
+/// action should write the reviewed text into a [`BlobshCommandTrace`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlobshDraft {
+    depth: BlobshDepth,
+    text: String,
+}
+
+impl BlobshDraft {
+    pub fn new(depth: BlobshDepth, text: impl Into<String>) -> Self {
+        Self {
+            depth,
+            text: text.into(),
+        }
+    }
+
+    pub fn from_layer(layer: &BlobshCommandLayer) -> Self {
+        Self::new(layer.depth, layer.text.clone())
+    }
+
+    pub const fn depth(&self) -> BlobshDepth {
+        self.depth
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn replace(&mut self, depth: BlobshDepth, text: impl Into<String>) {
+        self.depth = depth;
+        self.text = text.into();
+    }
+
+    /// Return normalized boundary text when the user explicitly commits the
+    /// draft. The stored draft remains byte-for-byte unchanged.
+    pub fn commit_text(&self) -> Result<&str, BlobshTraceError> {
+        let committed = self.text.trim();
+        if committed.is_empty() {
+            Err(BlobshTraceError::EmptyText)
+        } else {
+            Ok(committed)
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlobshTraceError {
     EmptyText,
@@ -256,7 +305,11 @@ impl BlobshCommandTrace {
         if layer.text.trim().is_empty() {
             return Err(BlobshTraceError::EmptyText);
         }
-        if self.layers.iter().any(|existing| existing.depth == layer.depth) {
+        if self
+            .layers
+            .iter()
+            .any(|existing| existing.depth == layer.depth)
+        {
             return Err(BlobshTraceError::DuplicateDepth(layer.depth));
         }
         let expected = self
@@ -411,6 +464,20 @@ mod tests {
     }
 
     #[test]
+    fn draft_preserves_spaces_and_newlines_without_mutating_the_trace() {
+        let trace = BlobshCommandTrace::from_direct_intent("workspace.open romeo").unwrap();
+        let materialized = trace.clone();
+        let mut draft = BlobshDraft::from_layer(trace.active_layer());
+
+        draft.replace(BlobshDepth::Intent, "  ciao mondo  \nnext line  ");
+
+        assert_eq!(draft.depth(), BlobshDepth::Intent);
+        assert_eq!(draft.text(), "  ciao mondo  \nnext line  ");
+        assert_eq!(draft.commit_text(), Ok("ciao mondo  \nnext line"));
+        assert_eq!(trace, materialized);
+    }
+
+    #[test]
     fn editing_intent_invalidates_every_deeper_representation() {
         let mut trace = complete_trace();
         trace
@@ -432,10 +499,7 @@ mod tests {
     fn editing_native_is_preserved_as_an_explicit_user_override() {
         let mut trace = complete_trace();
         trace
-            .edit_layer(
-                BlobshDepth::Native,
-                "nixos-rebuild test --flake .#local",
-            )
+            .edit_layer(BlobshDepth::Native, "nixos-rebuild test --flake .#local")
             .unwrap();
 
         assert_eq!(trace.layers().len(), 6);
