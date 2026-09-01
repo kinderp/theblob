@@ -1,0 +1,252 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+export component PixelBlobAvatar inherits Rectangle {
+    in property <string> name;
+    in property <string> role;
+    in property <string> status;
+    in property <string> accessory;
+    in property <color> blob-color;
+    in property <bool> focused: false;
+    callback activated;
+
+    property <bool> frame-two: false;
+    property <bool> blinking: false;
+    property <bool> gesture: false;
+
+    width: 208px;
+    height: 214px;
+    background: transparent;
+
+    // Low-frame-rate arcade motion. The focused Workspace feels more alive,
+    // while background Workspaces redraw far less often.
+    Timer {
+        interval: root.focused ? 360ms : 1200ms;
+        running: true;
+        triggered() => { root.frame-two = !root.frame-two; }
+    }
+
+    Timer {
+        interval: root.accessory == "helmet" ? 4300ms : root.accessory == "glasses" ? 5100ms : root.accessory == "wrench" ? 4700ms : 5600ms;
+        running: true;
+        triggered() => { root.blinking = true; }
+    }
+    Timer {
+        interval: 110ms;
+        running: root.blinking;
+        triggered() => { root.blinking = false; }
+    }
+
+    // Each role's gesture moves its identifying accessory, not just the body.
+    Timer {
+        interval: root.accessory == "helmet" ? 7600ms : root.accessory == "glasses" ? 8700ms : root.accessory == "wrench" ? 8200ms : 9300ms;
+        running: true;
+        triggered() => { root.gesture = true; }
+    }
+    Timer {
+        interval: 620ms;
+        running: root.gesture;
+        triggered() => { root.gesture = false; }
+    }
+
+    if root.focused: Rectangle {
+        x: 14px;
+        y: 10px;
+        width: 180px;
+        height: 168px;
+        background: transparent;
+        border-color: BlobTheme.accent;
+        border-width: 1px;
+    }
+
+    sprite := Rectangle {
+        x: touch.has-hover ? 14px : (root.frame-two ? 18px : 16px);
+        y: touch.has-hover ? 5px : (root.frame-two ? 10px : 14px);
+        width: 176px;
+        height: 164px;
+        background: transparent;
+        animate x, y { duration: 90ms; }
+
+        // Pixel shadow.
+        Rectangle { x: 40px; y: 151px; width: 96px; height: 8px; background: #00000066; }
+        Rectangle { x: 56px; y: 159px; width: 64px; height: 4px; background: #00000044; }
+
+        // Dark outline blocks.
+        Rectangle { x: 56px; y: 24px; width: 64px; height: 8px; background: #00000070; }
+        Rectangle { x: 40px; y: 32px; width: 96px; height: 8px; background: #00000070; }
+        Rectangle { x: 32px; y: 40px; width: 112px; height: 8px; background: #00000070; }
+        Rectangle { x: 24px; y: 48px; width: 128px; height: 16px; background: #00000070; }
+        Rectangle { x: 16px; y: 64px; width: 144px; height: 56px; background: #00000070; }
+        Rectangle { x: 24px; y: 120px; width: 128px; height: 16px; background: #00000070; }
+        Rectangle { x: 40px; y: 136px; width: 32px; height: 16px; background: #00000070; }
+        Rectangle { x: 80px; y: 136px; width: 24px; height: 16px; background: #00000070; }
+        Rectangle { x: 112px; y: 136px; width: 24px; height: 16px; background: #00000070; }
+
+        // Main colour mass snapped to an 8px grid.
+        Rectangle { x: 56px; y: 32px; width: 64px; height: 8px; background: root.blob-color; }
+        Rectangle { x: 40px; y: 40px; width: 96px; height: 8px; background: root.blob-color; }
+        Rectangle { x: 32px; y: 48px; width: 112px; height: 16px; background: root.blob-color; }
+        Rectangle { x: 24px; y: 64px; width: 128px; height: 56px; background: root.blob-color; }
+        Rectangle { x: 32px; y: 120px; width: 112px; height: 16px; background: root.blob-color; }
+        Rectangle { x: 40px; y: 136px; width: 24px; height: 8px; background: root.blob-color; }
+        Rectangle { x: 80px; y: 136px; width: 24px; height: 8px; background: root.blob-color; }
+        Rectangle { x: 112px; y: 136px; width: 24px; height: 8px; background: root.blob-color; }
+
+        // Arms. Hover is a strong wave; autonomous gestures remain compact.
+        Rectangle {
+            x: 8px;
+            y: touch.has-hover ? 56px : (root.gesture ? 64px : 80px);
+            width: 24px;
+            height: 32px;
+            background: root.blob-color;
+            animate y { duration: 100ms; }
+        }
+        Rectangle {
+            x: 144px;
+            y: touch.has-hover ? 40px : (root.gesture ? 56px : 80px);
+            width: 24px;
+            height: 32px;
+            background: root.blob-color;
+            animate y { duration: 100ms; }
+        }
+        Rectangle { x: 8px; y: touch.has-hover ? 48px : (root.gesture ? 56px : 72px); width: 16px; height: 8px; background: #ffffff24; }
+        Rectangle { x: 152px; y: touch.has-hover ? 32px : (root.gesture ? 48px : 72px); width: 16px; height: 8px; background: #ffffff24; }
+
+        // Pixel highlights and lower-right shade add cheap depth.
+        Rectangle { x: 48px; y: 48px; width: 32px; height: 8px; background: #ffffff48; }
+        Rectangle { x: 40px; y: 56px; width: 16px; height: 8px; background: #ffffff2e; }
+        Rectangle { x: 128px; y: 104px; width: 16px; height: 16px; background: #00000020; }
+        Rectangle { x: 112px; y: 120px; width: 24px; height: 8px; background: #00000018; }
+
+        // Eyes use hard square pixels. Blink collapses them to one scanline.
+        Rectangle {
+            x: 56px;
+            y: root.blinking ? 88px : 72px;
+            width: 24px;
+            height: root.blinking ? 4px : 24px;
+            background: BlobTheme.eye;
+            animate y, height { duration: 60ms; }
+            Rectangle { x: touch.has-hover ? 12px : 8px; y: 8px; width: 8px; height: root.blinking ? 0px : 12px; background: BlobTheme.ink; }
+            Rectangle { x: 12px; y: 4px; width: 4px; height: root.blinking ? 0px : 4px; background: #ffffff; }
+        }
+        Rectangle {
+            x: 104px;
+            y: root.blinking ? 88px : 72px;
+            width: 24px;
+            height: root.blinking ? 4px : 24px;
+            background: BlobTheme.eye;
+            animate y, height { duration: 60ms; }
+            Rectangle { x: touch.has-hover ? 4px : 8px; y: 8px; width: 8px; height: root.blinking ? 0px : 12px; background: BlobTheme.ink; }
+            Rectangle { x: 8px; y: 4px; width: 4px; height: root.blinking ? 0px : 4px; background: #ffffff; }
+        }
+
+        // Sprite-like mouth and cheeks.
+        Rectangle { x: 80px; y: 104px; width: 24px; height: 4px; background: BlobTheme.ink; }
+        if touch.has-hover || root.gesture: Rectangle { x: 84px; y: 108px; width: 16px; height: 8px; background: BlobTheme.ink; }
+        if !touch.has-hover && !root.gesture: Rectangle { x: 88px; y: 108px; width: 8px; height: 4px; background: BlobTheme.ink; }
+        Rectangle { x: 40px; y: 104px; width: 16px; height: 8px; background: BlobTheme.cheek; }
+        Rectangle { x: 128px; y: 104px; width: 16px; height: 8px; background: BlobTheme.cheek; }
+
+        // DEV: oversized hard-hat changes the entire upper silhouette.
+        if root.accessory == "helmet": Rectangle {
+            x: 24px;
+            y: root.gesture ? -10px : -4px;
+            width: 136px;
+            height: 16px;
+            background: BlobTheme.helmet-dark;
+            animate y { duration: 110ms; }
+            Rectangle { x: 16px; y: -16px; width: 104px; height: 24px; background: BlobTheme.helmet; }
+            Rectangle { x: 32px; y: -24px; width: 72px; height: 8px; background: BlobTheme.helmet; }
+            Rectangle { x: 56px; y: -32px; width: 24px; height: 8px; background: BlobTheme.helmet-dark; }
+            Rectangle { x: -8px; y: 16px; width: 152px; height: 8px; background: BlobTheme.helmet-dark; }
+            Rectangle { x: 24px; y: -10px; width: 24px; height: 8px; background: #ffffff45; }
+            Text { x: 48px; y: -19px; width: 48px; height: 20px; text: "</>"; color: BlobTheme.ink; font-size: 11px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        // DOCS: huge cyan spectacles cover most of the face and bounce upward
+        // during the role gesture as if the Blob adjusts them.
+        if root.accessory == "glasses": Rectangle {
+            x: 40px;
+            y: root.gesture ? 62px : 68px;
+            width: 48px;
+            height: 36px;
+            background: #081114ee;
+            border-color: BlobTheme.docs;
+            border-width: 5px;
+            animate y { duration: 110ms; }
+            Rectangle { x: 56px; y: 0px; width: 48px; height: 36px; background: #081114ee; border-color: BlobTheme.docs; border-width: 5px; }
+            Rectangle { x: 40px; y: 13px; width: 20px; height: 6px; background: BlobTheme.docs; }
+            Rectangle { x: -16px; y: 10px; width: 16px; height: 6px; background: BlobTheme.docs; }
+            Rectangle { x: 104px; y: 10px; width: 16px; height: 6px; background: BlobTheme.docs; }
+            Rectangle { x: 7px; y: 6px; width: 12px; height: 5px; background: #ffffff55; }
+            Rectangle { x: 63px; y: 6px; width: 12px; height: 5px; background: #ffffff55; }
+        }
+
+        // SYSTEM: a large block-built wrench forms a clear right-hand silhouette.
+        // The rare gesture raises it like a technician checking the machine.
+        if root.accessory == "wrench": Rectangle {
+            x: root.gesture ? 132px : 136px;
+            y: root.gesture ? 12px : 30px;
+            width: 32px;
+            height: 104px;
+            background: transparent;
+            animate x, y { duration: 110ms; }
+            Rectangle { x: 12px; y: 0px; width: 12px; height: 60px; background: #b8c2cc; }
+            Rectangle { x: 8px; y: 48px; width: 20px; height: 12px; background: #b8c2cc; }
+            Rectangle { x: 4px; y: 60px; width: 28px; height: 12px; background: #b8c2cc; }
+            Rectangle { x: 0px; y: 72px; width: 12px; height: 20px; background: #b8c2cc; }
+            Rectangle { x: 24px; y: 72px; width: 12px; height: 20px; background: #b8c2cc; }
+            Rectangle { x: 8px; y: 88px; width: 20px; height: 8px; background: #b8c2cc; }
+            Rectangle { x: 15px; y: 14px; width: 6px; height: 12px; background: #45515c; }
+            Rectangle { x: 15px; y: 33px; width: 6px; height: 6px; background: #45515c; }
+        }
+
+        // NOTES: a large pixel pencil and paper-tab create a very different
+        // silhouette. The gesture moves the pencil as if it is writing.
+        if root.accessory == "pencil": Rectangle {
+            x: root.gesture ? 128px : 136px;
+            y: root.gesture ? 18px : 34px;
+            width: 40px;
+            height: 104px;
+            background: transparent;
+            animate x, y { duration: 110ms; }
+            Rectangle { x: 12px; y: 0px; width: 16px; height: 72px; background: #e7bd5f; }
+            Rectangle { x: 12px; y: 0px; width: 16px; height: 12px; background: #e98787; }
+            Rectangle { x: 12px; y: 12px; width: 16px; height: 8px; background: #d9a83f; }
+            Rectangle { x: 8px; y: 72px; width: 24px; height: 8px; background: #d7bd93; }
+            Rectangle { x: 12px; y: 80px; width: 16px; height: 8px; background: #d7bd93; }
+            Rectangle { x: 16px; y: 88px; width: 8px; height: 12px; background: #333940; }
+            Rectangle { x: 0px; y: 36px; width: 8px; height: 44px; background: #fff2c722; }
+            Rectangle { x: 32px; y: 48px; width: 8px; height: 32px; background: #fff2c722; }
+        }
+    }
+
+    // The role line is intentionally explicit during this visual experiment:
+    // the accessory should communicate first, text confirms it second.
+    Text {
+        x: 8px;
+        y: 176px;
+        width: 192px;
+        height: 18px;
+        text: root.name + "  [" + root.role + "]";
+        color: root.focused ? BlobTheme.accent : BlobTheme.text-muted;
+        font-size: 11px;
+        font-weight: root.focused ? 600 : 400;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        x: 8px;
+        y: 195px;
+        width: 192px;
+        height: 15px;
+        text: root.status;
+        color: BlobTheme.text-faint;
+        font-size: 8px;
+        horizontal-alignment: center;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}

@@ -1,0 +1,656 @@
+import { BlobTheme } from "../design/tokens.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct BlobshCompletionEntry {
+    insert-text: string,
+    label: string,
+    explanation: string,
+    recommended: bool,
+}
+
+// Terminal-like editor shared by both Blobsh bars. The editor keeps native
+// TextInput selection/IME/caret behaviour, but owns Blobsh-specific shortcuts.
+component BlobshLineEditor inherits Rectangle {
+    in-out property <string> text: "";
+    in property <brush> text-color: BlobTheme.text;
+    in property <bool> expanded: true;
+    in property <bool> completion-open: false;
+    in property <string> selected-completion: "";
+    in property <bool> depth-navigation-enabled: false;
+
+    callback accepted;
+    callback edited;
+    callback apply-completion(string);
+    callback completion-previous;
+    callback completion-next;
+    callback close-completion;
+    callback depth-shallower;
+    callback depth-deeper;
+    callback toggle-expanded;
+    callback request-expand;
+    callback grow;
+    callback shrink;
+
+    private property <length> caret-margin: 10px;
+    private property <length> line-height: BlobTheme.font-body + 8px;
+    private property <bool> caret-end-pending: false;
+    forward-focus: editor;
+    background: transparent;
+    clip: true;
+
+    // Completion changes the bound string programmatically. Moving the caret
+    // on the next event-loop turn avoids racing that two-way binding.
+    Timer {
+        interval: 1ms;
+        running: root.caret-end-pending;
+        triggered() => {
+            root.caret-end-pending = false;
+            editor.set-selection-offsets(root.text.character-count, root.text.character-count);
+            editor.focus();
+        }
+    }
+
+    public function caret-to-end() {
+        root.caret-end-pending = true;
+        editor.focus();
+    }
+
+    public function append-newline() {
+        if (!root.expanded) {
+            root.request-expand();
+        }
+        root.text = root.text + "\n";
+        root.edited();
+        root.caret-to-end();
+    }
+
+    scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: root.expanded ? self.visible-width : max(self.visible-width, editor.preferred-width + 8px);
+        viewport-height: root.expanded ? max(self.visible-height, editor.preferred-height + 12px) : self.visible-height;
+
+        editor := TextInput {
+            x: 0px;
+            y: 0px;
+            width: root.expanded ? max(40px, scroll.visible-width) : max(scroll.visible-width, self.preferred-width + 8px);
+            height: root.expanded ? max(scroll.visible-height, self.preferred-height + 12px) : scroll.visible-height;
+            text <=> root.text;
+            color: root.text-color;
+            selection-background-color: BlobTheme.accent-soft;
+            font-size: BlobTheme.font-body;
+            font-family: "Menlo";
+            vertical-alignment: root.expanded ? top : center;
+            text-cursor-width: 4px;
+            single-line: !root.expanded;
+            wrap: root.expanded ? word-wrap : no-wrap;
+
+            cursor-position-changed(position) => {
+                if (!root.expanded) {
+                    if (position.x + scroll.viewport-x < root.caret-margin) {
+                        scroll.viewport-x = -position.x + root.caret-margin;
+                    } else if (position.x + scroll.viewport-x > scroll.visible-width - root.caret-margin - self.text-cursor-width) {
+                        scroll.viewport-x = scroll.visible-width - position.x - root.caret-margin - self.text-cursor-width;
+                    } else if (self.preferred-width <= scroll.visible-width) {
+                        scroll.viewport-x = 0px;
+                    }
+                } else {
+                    scroll.viewport-x = 0px;
+                    if (position.y + scroll.viewport-y < root.caret-margin) {
+                        scroll.viewport-y = -position.y + root.caret-margin;
+                    } else if (position.y + root.line-height + scroll.viewport-y > scroll.visible-height - root.caret-margin) {
+                        scroll.viewport-y = scroll.visible-height - position.y - root.line-height - root.caret-margin;
+                    }
+                }
+            }
+
+            edited => {
+                if (!root.expanded && self.preferred-width <= scroll.visible-width) {
+                    scroll.viewport-x = 0px;
+                }
+                root.edited();
+            }
+
+            key-pressed(event) => {
+                // On macOS Slint maps Command to `control`; Option is `alt`.
+                // Shift+Command+arrows resize the active bar, while plain
+                // Command/Option+arrows traverse the semantic depth trace.
+                if (event.modifiers.control && event.modifiers.shift && event.text == Key.UpArrow) {
+                    root.grow();
+                    accept
+                } else if (event.modifiers.control && event.modifiers.shift && event.text == Key.DownArrow) {
+                    root.shrink();
+                    accept
+                } else if (root.depth-navigation-enabled && (event.modifiers.control || event.modifiers.alt) && event.text == Key.UpArrow) {
+                    root.depth-shallower();
+                    accept
+                } else if (root.depth-navigation-enabled && (event.modifiers.control || event.modifiers.alt) && event.text == Key.DownArrow) {
+                    root.depth-deeper();
+                    accept
+                } else if (root.completion-open && event.text == Key.UpArrow) {
+                    root.completion-previous();
+                    accept
+                } else if (root.completion-open && event.text == Key.DownArrow) {
+                    root.completion-next();
+                    accept
+                } else if (event.text == Key.Tab && root.selected-completion != "") {
+                    root.apply-completion(root.selected-completion);
+                    accept
+                } else if (event.text == Key.Escape && root.completion-open) {
+                    root.close-completion();
+                    accept
+                } else if (event.text == Key.Return && event.modifiers.control) {
+                    root.toggle-expanded();
+                    accept
+                } else if (event.text == Key.Return && event.modifiers.shift) {
+                    root.append-newline();
+                    accept
+                } else if (event.text == Key.Return) {
+                    root.accepted();
+                    accept
+                } else {
+                    reject
+                }
+            }
+        }
+    }
+}
+
+export component BlobshBars inherits Rectangle {
+    in-out property <string> prompt-text: "";
+    in property <string> prompt-status: "ask The Blob";
+    in-out property <string> command-text: "";
+    in property <string> command-level: "INTENT · draft";
+    in property <string> command-status: "preview";
+    in property <bool> can-shallower: false;
+    in property <bool> can-deeper: false;
+
+    // `collapsed` means compact one-line mode, not hidden.
+    in-out property <bool> ai-collapsed: false;
+    in-out property <bool> command-collapsed: false;
+
+    in-out property <bool> copilot-open: false;
+    in property <string> copilot-title: "INTENT · choose a command family";
+    in property <string> copilot-body: "Start from a semantic namespace.";
+    in property <string> copilot-source: "Blobsh P0 intent grammar";
+    in property <[BlobshCompletionEntry]> completions;
+    in-out property <int> completion-selected-index: 0;
+    in-out property <int> completion-viewport-start: 0;
+    in property <length> window-height: 900px;
+
+    callback submit-prompt(string);
+    callback submit-command(string);
+    callback command-edited(string);
+    callback completion-selected(string);
+    callback ask-ai-about-command(string);
+    callback command-shallower;
+    callback command-deeper;
+
+    private property <int> completion-count: root.completions.length;
+    private property <string> selected-completion: root.completion-count == 0 ? ""
+        : root.completions[min(root.completion-selected-index, root.completion-count - 1)].insert-text;
+
+    // Independent height steps are the precursor of a configurable layout spec.
+    // 0..4 roughly correspond to 3, 5, 7, 9 and 11 text rows.
+    private property <int> ai-size-step: 1;
+    private property <int> command-size-step: 1;
+    private property <length> ai-height: root.ai-collapsed ? 46px : 82px + root.ai-size-step * 28px;
+    private property <length> command-base-height: root.command-collapsed ? 46px : 82px + root.command-size-step * 28px;
+    private property <length> command-height: root.command-base-height;
+    private property <length> popup-space-below: max(0px, root.command-height - 22px);
+    private property <length> popup-space-above: max(0px, root.window-height - root.command-height - 26px);
+    private property <int> desired-row-count: min(3, root.completion-count);
+    private property <length> desired-popup-height: root.completion-count == 0 ? 70px
+        : 61px + root.desired-row-count * 28px + (root.completion-count > root.desired-row-count ? 26px : 0px);
+    private property <bool> popup-opens-up: root.popup-space-below < root.desired-popup-height
+        && root.popup-space-above >= root.popup-space-below;
+    private property <length> popup-available-space: root.popup-opens-up ? root.popup-space-above : root.popup-space-below;
+    private property <int> completion-visible-count: root.completion-count == 0 ? 0
+        : root.popup-available-space >= 171px ? min(3, root.completion-count)
+        : root.popup-available-space >= 143px ? min(2, root.completion-count)
+        : 1;
+    private property <bool> has-more-above: root.completion-viewport-start > 0;
+    private property <bool> has-more-below: root.completion-viewport-start + root.completion-visible-count < root.completion-count;
+    private property <length> completion-popup-height: root.completion-count == 0 ? min(70px, root.popup-available-space)
+        : 61px + root.completion-visible-count * 28px
+            + (root.has-more-above ? 13px : 0px)
+            + (root.has-more-below ? 13px : 0px);
+    private property <length> popup-y: root.popup-opens-up
+        ? 6px - root.completion-popup-height
+        : 38px;
+
+    forward-focus: ai-input;
+    init => { ai-input.focus(); }
+
+    height: root.ai-height + root.command-height + 24px;
+    background: #070a0d;
+    clip: false;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: root.ai-height;
+            background: #070a0d;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                padding-top: root.ai-collapsed ? 0px : 8px;
+                padding-bottom: root.ai-collapsed ? 0px : 8px;
+                spacing: BlobTheme.space-2;
+
+                Text {
+                    text: "λ AI";
+                    color: BlobTheme.accent;
+                    font-size: BlobTheme.font-label;
+                    font-weight: 600;
+                    vertical-alignment: root.ai-collapsed ? center : top;
+                }
+
+                ai-input := BlobshLineEditor {
+                    horizontal-stretch: 1;
+                    text <=> root.prompt-text;
+                    expanded: !root.ai-collapsed;
+                    toggle-expanded => {
+                        root.ai-collapsed = !root.ai-collapsed;
+                        ai-input.focus();
+                    }
+                    request-expand => { root.ai-collapsed = false; }
+                    grow => {
+                        root.ai-collapsed = false;
+                        root.ai-size-step = min(4, root.ai-size-step + 1);
+                    }
+                    shrink => {
+                        if (root.ai-collapsed) {
+                            root.ai-collapsed = true;
+                        } else if (root.ai-size-step > 0) {
+                            root.ai-size-step -= 1;
+                        } else {
+                            root.ai-collapsed = true;
+                        }
+                    }
+                    accepted => { root.submit-prompt(root.prompt-text); }
+                }
+
+                Text {
+                    text: "[-]";
+                    color: ai-minus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.ai-collapsed ? center : top;
+                    ai-minus := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            if (root.ai-collapsed) {
+                                root.ai-collapsed = true;
+                            } else if (root.ai-size-step > 0) {
+                                root.ai-size-step -= 1;
+                            } else {
+                                root.ai-collapsed = true;
+                            }
+                            ai-input.focus();
+                        }
+                    }
+                }
+                Text {
+                    text: "[+]";
+                    color: ai-plus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.ai-collapsed ? center : top;
+                    ai-plus := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.ai-collapsed = false;
+                            root.ai-size-step = min(4, root.ai-size-step + 1);
+                            ai-input.focus();
+                        }
+                    }
+                }
+                Text {
+                    text: root.ai-collapsed ? "[↕]" : "[1L]";
+                    color: ai-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    vertical-alignment: root.ai-collapsed ? center : top;
+                    ai-collapse := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.ai-collapsed = !root.ai-collapsed;
+                            ai-input.focus();
+                        }
+                    }
+                }
+            }
+        }
+
+        command-bar := Rectangle {
+            height: root.command-height;
+            background: #090d11;
+            border-color: BlobTheme.border;
+            border-width: 1px;
+            clip: false;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                padding-top: root.command-collapsed ? 0px : 8px;
+                padding-bottom: root.command-collapsed ? 0px : 8px;
+                spacing: BlobTheme.space-2;
+
+                Rectangle {
+                    width: 232px;
+                    background: transparent;
+                    HorizontalLayout {
+                        spacing: BlobTheme.space-2;
+                        Text {
+                            text: "> BLOB";
+                            color: BlobTheme.accent-secondary;
+                            font-size: BlobTheme.font-label;
+                            font-weight: 600;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                        }
+                        Text {
+                            text: "[↑]";
+                            color: !root.can-shallower ? BlobTheme.text-faint : shallower.has-hover ? BlobTheme.accent : BlobTheme.text-muted;
+                            opacity: root.can-shallower ? 1 : 0.42;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            shallower := TouchArea {
+                                enabled: root.can-shallower;
+                                mouse-cursor: pointer;
+                                clicked => { root.command-shallower(); command-input.focus(); }
+                            }
+                        }
+                        Text {
+                            text: root.command-level;
+                            color: BlobTheme.text-muted;
+                            font-size: BlobTheme.font-micro;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                        }
+                        Text {
+                            text: "[↓]";
+                            color: !root.can-deeper ? BlobTheme.text-faint : deeper.has-hover ? BlobTheme.accent : BlobTheme.text-muted;
+                            opacity: root.can-deeper ? 1 : 0.42;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            deeper := TouchArea {
+                                enabled: root.can-deeper;
+                                mouse-cursor: pointer;
+                                clicked => { root.command-deeper(); command-input.focus(); }
+                            }
+                        }
+                    }
+                }
+
+                command-input := BlobshLineEditor {
+                    horizontal-stretch: 1;
+                    text <=> root.command-text;
+                    expanded: !root.command-collapsed;
+                    completion-open: root.copilot-open && root.completion-count > 0;
+                    selected-completion: root.selected-completion;
+                    depth-navigation-enabled: true;
+
+                    edited => {
+                        root.completion-selected-index = 0;
+                        root.completion-viewport-start = 0;
+                        root.command-edited(root.command-text);
+                        root.copilot-open = true;
+                    }
+                    completion-previous => {
+                        if (root.completion-count > 0) {
+                            root.completion-selected-index = root.completion-selected-index <= 0 ? root.completion-count - 1 : root.completion-selected-index - 1;
+                            if (root.completion-selected-index < root.completion-viewport-start) {
+                                root.completion-viewport-start = root.completion-selected-index;
+                            } else if (root.completion-selected-index >= root.completion-viewport-start + root.completion-visible-count) {
+                                root.completion-viewport-start = max(0, root.completion-selected-index - root.completion-visible-count + 1);
+                            }
+                        }
+                    }
+                    completion-next => {
+                        if (root.completion-count > 0) {
+                            root.completion-selected-index = root.completion-selected-index >= root.completion-count - 1 ? 0 : root.completion-selected-index + 1;
+                            if (root.completion-selected-index < root.completion-viewport-start) {
+                                root.completion-viewport-start = root.completion-selected-index;
+                            } else if (root.completion-selected-index >= root.completion-viewport-start + root.completion-visible-count) {
+                                root.completion-viewport-start = max(0, root.completion-selected-index - root.completion-visible-count + 1);
+                            }
+                        }
+                    }
+                    apply-completion(text) => {
+                        root.command-text = text;
+                        root.completion-selected-index = 0;
+                        root.completion-viewport-start = 0;
+                        root.completion-selected(text);
+                        command-input.caret-to-end();
+                        root.copilot-open = true;
+                    }
+                    close-completion => {
+                        root.copilot-open = false;
+                    }
+                    depth-shallower => { if (root.can-shallower) { root.command-shallower(); command-input.focus(); } }
+                    depth-deeper => { if (root.can-deeper) { root.command-deeper(); command-input.focus(); } }
+                    toggle-expanded => {
+                        root.command-collapsed = !root.command-collapsed;
+                        command-input.focus();
+                    }
+                    request-expand => { root.command-collapsed = false; }
+                    grow => {
+                        root.command-collapsed = false;
+                        root.command-size-step = min(4, root.command-size-step + 1);
+                    }
+                    shrink => {
+                        if (root.command-collapsed) {
+                            root.command-collapsed = true;
+                        } else if (root.command-size-step > 0) {
+                            root.command-size-step -= 1;
+                        } else {
+                            root.command-collapsed = true;
+                        }
+                    }
+                    accepted => { root.submit-command(root.command-text); }
+                }
+
+                Rectangle {
+                    width: 184px;
+                    background: transparent;
+                    HorizontalLayout {
+                        spacing: BlobTheme.space-2;
+                        Text {
+                            visible: root.selected-completion != "" && root.copilot-open;
+                            text: "[Tab]";
+                            color: BlobTheme.text-faint;
+                            font-size: BlobTheme.font-micro;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                        }
+                        Text {
+                            text: "[?]";
+                            color: copilot-touch.has-hover || root.copilot-open ? BlobTheme.accent : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            copilot-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.copilot-open = !root.copilot-open;
+                                    root.completion-selected-index = 0;
+                                    root.completion-viewport-start = 0;
+                                    command-input.focus();
+                                }
+                            }
+                        }
+                        Text {
+                            text: "[-]";
+                            color: command-minus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            command-minus := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if (root.command-collapsed) {
+                                        root.command-collapsed = true;
+                                    } else if (root.command-size-step > 0) {
+                                        root.command-size-step -= 1;
+                                    } else {
+                                        root.command-collapsed = true;
+                                    }
+                                    command-input.focus();
+                                }
+                            }
+                        }
+                        Text {
+                            text: "[+]";
+                            color: command-plus.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            command-plus := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.command-collapsed = false;
+                                    root.command-size-step = min(4, root.command-size-step + 1);
+                                    command-input.focus();
+                                }
+                            }
+                        }
+                        Text {
+                            text: "[" + root.command-status + "]";
+                            color: root.command-status == "approval required" || root.command-status == "invalid" ? BlobTheme.warning : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-micro;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                        }
+                        Text {
+                            text: root.command-collapsed ? "[↕]" : "[1L]";
+                            color: command-collapse.has-hover ? BlobTheme.accent : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: root.command-collapsed ? center : top;
+                            command-collapse := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.command-collapsed = !root.command-collapsed;
+                                    command-input.focus();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Floating completion overlay: it belongs to the BLOB editor and
+            // is placement-aware. Compact bars normally flip it above the
+            // command row; sufficiently tall bars can keep it below.
+            if root.copilot-open: Rectangle {
+                x: 244px;
+                y: root.popup-y;
+                width: max(280px, parent.width - 244px - 196px);
+                height: root.completion-popup-height;
+                background: #0a0f14ee;
+                border-color: BlobTheme.border;
+                border-width: 1px;
+                border-radius: BlobTheme.radius-md;
+
+                VerticalLayout {
+                    padding: 7px;
+                    spacing: 3px;
+
+                    HorizontalLayout {
+                        spacing: BlobTheme.space-2;
+                        Text {
+                            horizontal-stretch: 1;
+                            text: root.copilot-title;
+                            color: BlobTheme.accent;
+                            font-size: BlobTheme.font-small;
+                            font-weight: 600;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: root.popup-opens-up ? "↑ above · Esc" : "↓ below · Esc";
+                            color: BlobTheme.text-faint;
+                            font-size: BlobTheme.font-micro;
+                        }
+                    }
+
+                    if root.has-more-above: Text {
+                        text: "▲ more";
+                        color: BlobTheme.text-faint;
+                        font-size: BlobTheme.font-micro;
+                        horizontal-alignment: center;
+                    }
+
+                    for item[index] in root.completions: Rectangle {
+                        visible: index >= root.completion-viewport-start
+                            && index < root.completion-viewport-start + root.completion-visible-count;
+                        height: self.visible ? 25px : 0px;
+                        background: root.completion-selected-index == index ? BlobTheme.accent-soft : completion-touch.has-hover ? BlobTheme.surface-raised : transparent;
+                        Text {
+                            x: 5px;
+                            text: (root.completion-selected-index == index ? "▶ " : "  ") + item.label;
+                            color: root.completion-selected-index == index ? BlobTheme.accent : BlobTheme.text-muted;
+                            font-size: BlobTheme.font-small;
+                            vertical-alignment: center;
+                        }
+                        completion-touch := TouchArea {
+                            enabled: parent.visible;
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.command-text = item.insert-text;
+                                root.completion-selected-index = index;
+                                root.completion-selected(item.insert-text);
+                                command-input.caret-to-end();
+                                root.copilot-open = true;
+                            }
+                        }
+                    }
+
+                    if root.has-more-below: Text {
+                        text: "▼ more";
+                        color: BlobTheme.text-faint;
+                        font-size: BlobTheme.font-micro;
+                        horizontal-alignment: center;
+                    }
+
+                    if root.completion-count == 0: Text {
+                        text: root.copilot-body;
+                        color: BlobTheme.text-muted;
+                        font-size: BlobTheme.font-small;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        Text {
+                            horizontal-stretch: 1;
+                            text: root.completion-count > 0
+                                ? "↑/↓ navigate choices · Tab insert"
+                                : "no deterministic completion";
+                            color: BlobTheme.text-faint;
+                            font-size: BlobTheme.font-micro;
+                        }
+                        Text {
+                            text: "[ask AI]";
+                            color: ask-ai-touch.has-hover ? BlobTheme.accent-secondary : BlobTheme.text-faint;
+                            font-size: BlobTheme.font-micro;
+                            ask-ai-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.ask-ai-about-command(root.command-text); ai-input.focus(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            background: #06090c;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            Text {
+                x: BlobTheme.space-3;
+                width: parent.width - 2 * BlobTheme.space-3;
+                text: "macOS: ⌘↑/⌘↓ depth · ↑/↓ completion · Tab insert · Enter process · ⇧Enter newline · ⌘Enter 1L/multiline · ⌘⇧↑/↓ resize";
+                color: BlobTheme.text-faint;
+                font-size: BlobTheme.font-micro;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}

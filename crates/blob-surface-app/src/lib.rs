@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+pub mod animation_store;
+pub mod character;
+pub mod shell;
+
 use blob_core::{BindingPlan, CausalRecord, Situation, Task, TaskState, TechnicianAutonomy};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,8 +60,6 @@ pub struct TechnicianEvidenceContext<'a> {
 }
 
 impl TechnicianEvidenceContext<'_> {
-    /// Build a deterministic, read-only Technician projection from evidence that
-    /// already exists in the semantic pipeline. No model call or mutation occurs.
     pub fn project(
         &self,
         intent: TechnicianIntent,
@@ -240,10 +242,6 @@ impl SurfaceApplication {
         self.last_technician_intent
     }
 
-    /// Apply one renderer-neutral user intent.
-    ///
-    /// This layer deliberately has no executor, D-Bus, package-manager or NixOS
-    /// dependency. Recording a Technician intent is not execution authority.
     pub fn apply(&mut self, intent: SurfaceIntent) -> SurfaceEffect {
         match intent {
             SurfaceIntent::Navigate(page) => {

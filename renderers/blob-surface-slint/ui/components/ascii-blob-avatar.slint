@@ -1,0 +1,111 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+export component AsciiBlobAvatar inherits Rectangle {
+    in property <string> name;
+    in property <string> role;
+    in property <string> status;
+    in property <string> accessory;
+    in property <color> blob-color;
+    in property <bool> focused: false;
+    callback activated;
+
+    property <bool> frame-two: false;
+    property <bool> blinking: false;
+    property <bool> gesture: false;
+
+    width: 224px;
+    height: 254px;
+    background: transparent;
+
+    Timer {
+        interval: root.focused ? 820ms : 1500ms;
+        running: true;
+        triggered() => { root.frame-two = !root.frame-two; }
+    }
+    Timer {
+        interval: root.accessory == "helmet" ? 3800ms : root.accessory == "glasses" ? 4500ms : root.accessory == "wrench" ? 4200ms : 5000ms;
+        running: true;
+        triggered() => { root.blinking = true; }
+    }
+    Timer { interval: 110ms; running: root.blinking; triggered() => { root.blinking = false; } }
+    Timer {
+        interval: root.accessory == "helmet" ? 7300ms : root.accessory == "glasses" ? 8200ms : root.accessory == "wrench" ? 7800ms : 9000ms;
+        running: true;
+        triggered() => { root.gesture = true; }
+    }
+    Timer { interval: 650ms; running: root.gesture; triggered() => { root.gesture = false; } }
+
+    if root.focused: Rectangle {
+        x: 8px;
+        y: 10px;
+        width: 208px;
+        height: 198px;
+        background: #0a1116;
+        border-color: BlobTheme.accent;
+        border-width: 1px;
+    }
+
+    Text {
+        x: 8px;
+        y: root.frame-two ? 19px : 23px;
+        width: 208px;
+        height: 166px;
+        text: root.accessory == "helmet" ?
+            (root.blinking ?
+                "      .--------.\n   __/  </>   \\__\n  /__ HARD HAT __\\\n     .-^^^^-.\n   _/  -  -  \\_\n  /    \\__/    \\   _\n |   .-<__>-.    |--<_|\n  \\__\\_VV_/___/\n     /_/  \\_\\" :
+             root.gesture ?
+                "      .--------.\n   __/  </>   \\__\n  /__ HARD HAT __\\\n     .-^^^^-.       /|\n   _/  >  <  \\_    ||\n  /    \\__/    \\___||\n |    .<__>.      ___/\n  \\___\\VV/____/\n      /_  _\\" :
+                "      .--------.\n   __/  </>   \\__\n  /__ HARD HAT __\\\n     .-^^^^-.\n   _/  >  <  \\_\n  /    \\__/    \\   _\n |   .-<__>-.    |--<_|\n  \\__\\_VV_/___/\n     /_/  \\_\\") :
+            root.accessory == "glasses" ?
+            (root.blinking ?
+                "       .-^^^^-.\n     _/  ----  \\_\n    /  [====]   \\   ___\n   |---[====]----|--/__/\n   |      ^      | /__/\n    \\   \\__/   /\n     '._<__>_.'\n       /_||_\\" :
+             root.gesture ?
+                "       .-^^^^-.\n     _/  >  <   \\_\n    /  [====]   \\  _/\n   |---[====]----|-(_ \n   |      ^      |  \\_\n    \\   \\__/   /\n     '._<__>_.'\n       /_||_\\" :
+                "       .-^^^^-.\n     _/  o  o   \\_\n    /  [====]   \\   ___\n   |---[====]----|--/__/\n   |      ^      | /__/\n    \\   \\__/   /\n     '._<__>_.'\n       /_||_\\") :
+            root.accessory == "wrench" ?
+            (root.blinking ?
+                "       .-^^^^-.\n     _/  -  -   \\_\n    /     __     \\      __\n   |    _/  \\_    |   __/  \\__\n   |   <  VV  >   |=={  WRENCH }\n    \\   \\__/   /   '--\\__/--'\n     '._<__>_.'\n       /_||_\\" :
+             root.gesture ?
+                "       .-^^^^-.       __\n     _/  >  <   \\_   __/  \\__\n    /    \\__/    \\={  WRENCH }\n   |    _/VV\\_    | '--\\__/--'\n   |   <______.>   |\n    \\            /\n     '._<__>_.'\n       /_||_\\" :
+                "       .-^^^^-.\n     _/  >  <   \\_\n    /    \\__/    \\      __\n   |    _/VV\\_    |   __/  \\__\n   |   <______.>   |=={  WRENCH }\n    \\            /   '--\\__/--'\n     '._<__>_.'\n       /_||_\\") :
+            (root.blinking ?
+                "       .-^^^^-.\n     _/  -  -   \\_\n    /     __     \\       /\n   |    _/  \\_    |     /  \\==\n   |   <  VV  >   |----< PENCIL\n    \\   \\__/   /      \\  /==\n     '._<__>_.'        \\/\n       /_||_\\" :
+             root.gesture ?
+                "       .-^^^^-.          /\n     _/  >  <   \\_        /  \\==\n    /    \\__/    \\_____< PENCIL\n   |    _/VV\\_     _____/ \\  /==\n   |   <______.>   |        \\/\n    \\            /\n     '._<__>_.'\n       /_||_\\" :
+                "       .-^^^^-.\n     _/  >  <   \\_\n    /    \\__/    \\       /\n   |    _/VV\\_    |      /  \\==\n   |   <______.>   |----< PENCIL\n    \\            /      \\  /==\n     '._<__>_.'        \\/\n       /_||_\\");
+        color: root.focused ? root.blob-color : BlobTheme.text-muted;
+        font-family: "Menlo";
+        font-size: BlobTheme.font-small;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        animate y { duration: 120ms; }
+    }
+
+    Text {
+        x: 12px;
+        y: 198px;
+        width: 200px;
+        height: 23px;
+        text: root.name + " [" + root.role + "]";
+        color: root.focused ? BlobTheme.accent : BlobTheme.text-muted;
+        font-size: BlobTheme.font-body;
+        font-weight: root.focused ? 600 : 400;
+        horizontal-alignment: center;
+    }
+    Text {
+        x: 12px;
+        y: 222px;
+        width: 200px;
+        height: 19px;
+        text: root.status;
+        color: BlobTheme.text-faint;
+        font-size: BlobTheme.font-micro;
+        horizontal-alignment: center;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}

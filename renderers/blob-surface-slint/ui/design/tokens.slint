@@ -1,20 +1,49 @@
 export global BlobTheme {
-    in-out property <color> canvas: #0b0e14;
-    in-out property <color> surface: #111722;
-    in-out property <color> surface-raised: #161d2a;
-    in-out property <color> surface-soft: #0f141d;
-    in-out property <color> border: #253044;
-    in-out property <color> border-soft: #1b2433;
+    // Reversible P0 experiment: Arch/terminal-like dark baseline.
+    // Almost-black neutral surfaces, Arch-blue punctuation and low saturation
+    // keep the Shell technical without turning it into a neon dashboard.
+    in-out property <color> canvas: #0c0f12;
+    in-out property <color> surface: #11151a;
+    in-out property <color> surface-raised: #171c22;
+    in-out property <color> surface-soft: #14191f;
+    in-out property <color> border: #28313a;
+    in-out property <color> border-soft: #202831;
+    in-out property <color> glow-soft: #18232b;
 
-    in-out property <color> text: #f3f6fb;
-    in-out property <color> text-muted: #9ba8bc;
-    in-out property <color> text-faint: #66758c;
+    in-out property <color> text: #c8d0d8;
+    in-out property <color> text-muted: #8b949e;
+    in-out property <color> text-faint: #59636e;
+    in-out property <color> ink: #15191d;
 
-    in-out property <color> accent: #7567ff;
-    in-out property <color> accent-soft: #282447;
-    in-out property <color> success: #82d89c;
-    in-out property <color> warning: #e7bd72;
-    in-out property <color> danger: #ee8d8d;
+    // Arch-blue is the primary shell punctuation; status colours remain muted.
+    in-out property <color> accent: #1793d1;
+    in-out property <color> accent-secondary: #8f7cec;
+    in-out property <color> accent-soft: #132a38;
+    in-out property <color> success: #7fbf7f;
+    in-out property <color> success-soft: #17271c;
+    in-out property <color> warning: #d3a95f;
+    in-out property <color> warning-soft: #302718;
+    in-out property <color> danger: #d76a6a;
+
+    // Workspace identity lives mainly on the characters.
+    in-out property <color> dev: #d3a95f;
+    in-out property <color> docs: #4fb7a7;
+    in-out property <color> system: #7fbf7f;
+    in-out property <color> notes: #ad7bc4;
+    in-out property <color> terminal: #7fbf7f;
+    in-out property <color> helmet: #d8b66b;
+    in-out property <color> helmet-dark: #a77f39;
+    in-out property <color> eye: #eef2f4;
+    in-out property <color> cheek: #d77a8560;
+
+    // P0 typography scale. These are centralized now so a future config/theme
+    // layer can expose font scaling without rewriting individual components.
+    in-out property <length> font-micro: 10px;
+    in-out property <length> font-small: 11px;
+    in-out property <length> font-body: 13px;
+    in-out property <length> font-label: 14px;
+    in-out property <length> font-title: 16px;
+    in-out property <length> font-hero: 18px;
 
     in-out property <length> space-1: 4px;
     in-out property <length> space-2: 8px;
@@ -25,12 +54,14 @@ export global BlobTheme {
     in-out property <length> space-8: 32px;
     in-out property <length> space-10: 40px;
 
-    in-out property <length> radius-sm: 8px;
-    in-out property <length> radius-md: 12px;
-    in-out property <length> radius-lg: 18px;
-    in-out property <length> radius-xl: 24px;
+    in-out property <length> radius-sm: 2px;
+    in-out property <length> radius-md: 3px;
+    in-out property <length> radius-lg: 4px;
+    in-out property <length> radius-xl: 5px;
 
-    in-out property <length> rail-width: 172px;
-    in-out property <length> technician-width: 320px;
-    in-out property <length> header-height: 58px;
+    in-out property <length> rail-width: 188px;
+    in-out property <length> technician-width: 340px;
+    in-out property <length> header-height: 36px;
+    in-out property <length> prompt-height: 48px;
+    in-out property <length> prompt-expanded-height: 104px;
 }

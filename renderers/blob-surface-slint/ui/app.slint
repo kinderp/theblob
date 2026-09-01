@@ -1,175 +1,234 @@
 import { BlobTheme } from "design/tokens.slint";
-import { BlobNavItem, BlobStatus } from "components/primitives.slint";
-import { TechnicianPanel } from "components/technician.slint";
-import { InspectorView } from "screens/inspector.slint";
-import { NowView } from "screens/now.slint";
-import { PlaceholderView } from "screens/placeholder.slint";
-import { WorkspaceView } from "screens/workspace.slint";
+import { BlobWorld } from "screens/blob-world.slint";
+import { ContextOverlay } from "components/context-overlay.slint";
+import { BlobshBars, BlobshCompletionEntry } from "components/blobsh-bars.slint";
 
 export component BlobShell inherits Window {
-    in property <string> workspace-title;
     in property <string> situation-summary;
     in property <string> task-status;
     in property <string> binding-summary;
     in property <string> verifier-summary;
     in property <string> execution-output;
-    in property <string> causal-summary;
-    in property <int> active-page: 0;
-    in property <string> technician-title: "I’m watching this Workspace";
-    in property <string> technician-body: "Choose Explain, Teach or Prepare to project the current structured evidence.";
-    in property <string> technician-detail: "No AI model is used in this demo slice.";
-    in property <string> technician-status: "Ready · read-only evidence projection";
 
-    callback navigate-now;
-    callback navigate-workspace;
-    callback navigate-history;
-    callback navigate-fabric;
-    callback open-inspector;
-    callback close-inspector;
-    callback technician-explain;
-    callback technician-teach;
-    callback technician-prepare;
+    in property <string> romeo-action: "idle";
+    in property <string> docs-action: "idle";
+    in property <string> system-action: "idle";
+    in property <string> notes-action: "idle";
+
+    in property <bool> bluetooth-enabled: false;
+    in property <string> bluetooth-label: "Bluetooth disabled";
+    in property <string> pipewire-label: "PipeWire enabled";
+    in property <string> printing-label: "Printing disabled";
+    in property <bool> system-proposal-pending: false;
+    in property <string> system-proposal-title: "";
+    in property <string> system-proposal-summary: "";
+    in property <string> system-proposal-diff: "";
+
+    in property <int> focused-workspace: 0;
+    in property <int> expanded-workspace: -1;
+    in-out property <string> blob-style: "soft3d";
+
+    in-out property <string> prompt-text: "";
+    in property <string> prompt-status: "ask The Blob";
+    in-out property <string> command-text: "";
+    in property <string> command-level: "INTENT · draft";
+    in property <string> command-status: "preview";
+    in property <bool> command-can-shallower: false;
+    in property <bool> command-can-deeper: false;
+    in-out property <bool> ai-bar-collapsed: false;
+    in-out property <bool> command-bar-collapsed: false;
+
+    in-out property <bool> copilot-open: false;
+    in property <string> copilot-title: "Command Copilot";
+    in property <string> copilot-body: "Edit the BLOB command directly or ask the AI for help.";
+    in property <string> copilot-source: "Blobsh schema";
+    in property <[BlobshCompletionEntry]> completions;
+    in-out property <int> completion-selected-index: 0;
+    in-out property <int> completion-viewport-start: 0;
+
+    in property <bool> overlay-open: false;
+    in property <string> overlay-eyebrow: "TECHNICIAN";
+    in property <string> overlay-title: "";
+    in property <string> overlay-body: "";
+    in property <string> overlay-detail: "";
+    in property <string> overlay-status: "";
+
+    callback activate-workspace(int);
+    callback collapse-workspaces;
+    callback explain-current;
+    callback show-details;
+    callback close-overlay;
+    callback system-propose-bluetooth;
+    callback system-clear-proposal;
+    callback submit-prompt(string);
+    callback submit-command(string);
+    callback command-edited(string);
+    callback completion-selected(string);
+    callback ask-ai-about-command(string);
+    callback command-shallower;
+    callback command-deeper;
 
     title: "The Blob";
-    width: 1280px;
-    height: 780px;
+    width: 1440px;
+    height: 900px;
     background: BlobTheme.canvas;
+
+    default-font-family: "Menlo";
+    default-font-size: BlobTheme.font-body;
+    default-font-weight: 400;
 
     VerticalLayout {
         spacing: 0px;
 
         Rectangle {
-            height: BlobTheme.header-height;
-            background: BlobTheme.canvas;
+            height: 36px;
+            background: #070a0d;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
 
             HorizontalLayout {
-                padding: BlobTheme.space-4;
-                spacing: BlobTheme.space-4;
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                spacing: BlobTheme.space-3;
 
+                Text { text: "The Blob OS"; color: #65d69d; font-size: BlobTheme.font-body; font-weight: 600; vertical-alignment: center; }
+                Text { text: "|  P0"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
                 Text {
-                    text: "THE BLOB";
+                    text: "|  workspace: " + (root.focused-workspace == 0 ? "1 Romeo" : root.focused-workspace == 1 ? "2 Docs" : root.focused-workspace == 2 ? "3 System" : "4 Notes");
                     color: BlobTheme.text;
-                    font-size: 19px;
-                    font-weight: 700;
+                    font-size: BlobTheme.font-small;
                     vertical-alignment: center;
                 }
-
+                Text { text: "|  shell: blobsh"; color: BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: "|  session: main"; color: BlobTheme.text-muted; font-size: BlobTheme.font-small; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-
-                BlobStatus { label: "MacBook · This Surface"; positive: true; }
-                BlobStatus { label: "Home Server · Online"; positive: true; }
+                Text { text: "fabric 1"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: "host local"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: "authority user"; color: BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
             }
         }
 
-        HorizontalLayout {
-            spacing: 0px;
+        Rectangle {
+            height: 34px;
+            background: #0b0f13;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
 
-            Rectangle {
-                width: BlobTheme.rail-width;
-                background: BlobTheme.canvas;
-                border-color: BlobTheme.border-soft;
-                border-width: 1px;
+            HorizontalLayout {
+                padding-left: BlobTheme.space-3;
+                padding-right: BlobTheme.space-3;
+                spacing: BlobTheme.space-4;
 
-                VerticalLayout {
-                    padding: BlobTheme.space-4;
-                    spacing: BlobTheme.space-2;
+                Text { text: root.focused-workspace == 0 ? "1:Romeo*" : "1:Romeo"; color: root.focused-workspace == 0 ? BlobTheme.dev : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 1 ? "2:Docs*" : "2:Docs"; color: root.focused-workspace == 1 ? BlobTheme.docs : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 2 ? "3:System*" : "3:System"; color: root.focused-workspace == 2 ? BlobTheme.system : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Text { text: root.focused-workspace == 3 ? "4:Notes*" : "4:Notes"; color: root.focused-workspace == 3 ? BlobTheme.notes : BlobTheme.text-faint; font-size: BlobTheme.font-small; vertical-alignment: center; }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
 
-                    Text {
-                        text: "PERSONAL WORLD";
-                        color: BlobTheme.text-faint;
-                        font-size: 10px;
-                        font-weight: 700;
-                    }
-
-                    BlobNavItem {
-                        label: "Now";
-                        selected: root.active-page == 0;
-                        clicked => { root.navigate-now(); }
-                    }
-                    BlobNavItem {
-                        label: "Workspaces";
-                        selected: root.active-page == 1;
-                        clicked => { root.navigate-workspace(); }
-                    }
-                    BlobNavItem {
-                        label: "History";
-                        selected: root.active-page == 2;
-                        clicked => { root.navigate-history(); }
-                    }
-                    BlobNavItem {
-                        label: "Fabric";
-                        selected: root.active-page == 3;
-                        clicked => { root.navigate-fabric(); }
-                    }
-
-                    Rectangle { vertical-stretch: 1; background: transparent; }
-
-                    Text {
-                        text: root.active-page == 4 ? "INSPECTOR · READ ONLY" : "DEMO · SAFE VM";
-                        color: BlobTheme.text-faint;
-                        font-size: 10px;
-                        font-weight: 700;
-                    }
+                Text {
+                    text: "[3D]";
+                    color: root.blob-style == "soft3d" ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    font-weight: root.blob-style == "soft3d" ? 600 : 400;
+                    vertical-alignment: center;
+                    three-d-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "soft3d"; } }
                 }
+                Text {
+                    text: "[PIXEL]";
+                    color: root.blob-style == "pixel" ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    font-weight: root.blob-style == "pixel" ? 600 : 400;
+                    vertical-alignment: center;
+                    pixel-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "pixel"; } }
+                }
+                Text {
+                    text: "[ASCII]";
+                    color: root.blob-style == "ascii" ? BlobTheme.accent : BlobTheme.text-faint;
+                    font-size: BlobTheme.font-small;
+                    font-weight: root.blob-style == "ascii" ? 600 : 400;
+                    vertical-alignment: center;
+                    ascii-touch := TouchArea { mouse-cursor: pointer; clicked => { root.blob-style = "ascii"; } }
+                }
+
+                Text { text: "mode: " + (root.expanded-workspace < 0 ? "world" : "world+surfaces"); color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
+                Text { text: "surface-host: slint"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
+                Text { text: "placement: local"; color: BlobTheme.text-faint; font-size: BlobTheme.font-micro; vertical-alignment: center; }
             }
+        }
 
-            Rectangle {
-                horizontal-stretch: 1;
-                background: BlobTheme.canvas;
+        Rectangle {
+            vertical-stretch: 1;
+            background: BlobTheme.canvas;
 
-                if root.active-page == 0: NowView {
-                    workspace-title: root.workspace-title;
-                    situation-summary: root.situation-summary;
-                    task-status: root.task-status;
-                    binding-summary: root.binding-summary;
-                    execution-output: root.execution-output;
-                    open-workspace => { root.navigate-workspace(); }
-                    open-inspector => { root.open-inspector(); }
-                }
-
-                if root.active-page == 1: WorkspaceView {
-                    workspace-title: root.workspace-title;
-                    situation-summary: root.situation-summary;
-                    task-status: root.task-status;
-                    binding-summary: root.binding-summary;
-                    verifier-summary: root.verifier-summary;
-                    execution-output: root.execution-output;
-                    go-home => { root.navigate-now(); }
-                    open-inspector => { root.open-inspector(); }
-                }
-
-                if root.active-page == 2: PlaceholderView {
-                    title: "History";
-                    body: "The next demo slice will turn the existing causal records into a readable timeline with a Why? path back through Event, Situation, Task, decision and result. No synthetic history is shown here.";
-                }
-
-                if root.active-page == 3: PlaceholderView {
-                    title: "Fabric";
-                    body: "The next demo slice will project real device and capability state here. The Surface will show what each trusted node can provide without turning topology into the primary user experience.";
-                }
-
-                if root.active-page == 4: InspectorView {
-                    binding-summary: root.binding-summary;
-                    verifier-summary: root.verifier-summary;
-                    execution-output: root.execution-output;
-                    causal-summary: root.causal-summary;
-                    close => { root.close-inspector(); }
-                }
-            }
-
-            TechnicianPanel {
-                context-summary: root.situation-summary;
+            BlobWorld {
+                focused-workspace: root.focused-workspace;
+                expanded-workspace: root.expanded-workspace;
+                blob-style: root.blob-style;
+                romeo-action: root.romeo-action;
+                docs-action: root.docs-action;
+                system-action: root.system-action;
+                notes-action: root.notes-action;
+                situation-summary: root.situation-summary;
+                task-status: root.task-status;
+                binding-summary: root.binding-summary;
                 verifier-summary: root.verifier-summary;
-                response-title: root.technician-title;
-                response-body: root.technician-body;
-                response-detail: root.technician-detail;
-                intent-status: root.technician-status;
-                explain => { root.technician-explain(); }
-                teach => { root.technician-teach(); }
-                prepare => { root.technician-prepare(); }
+                execution-output: root.execution-output;
+                bluetooth-enabled: root.bluetooth-enabled;
+                bluetooth-label: root.bluetooth-label;
+                pipewire-label: root.pipewire-label;
+                printing-label: root.printing-label;
+                proposal-pending: root.system-proposal-pending;
+                proposal-title: root.system-proposal-title;
+                proposal-summary: root.system-proposal-summary;
+                proposal-diff: root.system-proposal-diff;
+                activate-workspace(index) => { root.activate-workspace(index); }
+                collapse-workspaces => { root.collapse-workspaces(); }
+                system-propose-bluetooth => { root.system-propose-bluetooth(); }
+                system-clear-proposal => { root.system-clear-proposal(); }
+                explain-current => { root.explain-current(); }
+                show-details => { root.show-details(); }
             }
+
+            if root.overlay-open: Rectangle {
+                background: #00000077;
+                ContextOverlay {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    eyebrow: root.overlay-eyebrow;
+                    title: root.overlay-title;
+                    body: root.overlay-body;
+                    detail: root.overlay-detail;
+                    status: root.overlay-status;
+                    close => { root.close-overlay(); }
+                }
+            }
+        }
+
+        BlobshBars {
+            prompt-text <=> root.prompt-text;
+            prompt-status: root.prompt-status;
+            command-text <=> root.command-text;
+            command-level: root.command-level;
+            command-status: root.command-status;
+            can-shallower: root.command-can-shallower;
+            can-deeper: root.command-can-deeper;
+            ai-collapsed <=> root.ai-bar-collapsed;
+            command-collapsed <=> root.command-bar-collapsed;
+            copilot-open <=> root.copilot-open;
+            copilot-title: root.copilot-title;
+            copilot-body: root.copilot-body;
+            copilot-source: root.copilot-source;
+            completions: root.completions;
+            completion-selected-index <=> root.completion-selected-index;
+            completion-viewport-start <=> root.completion-viewport-start;
+            window-height: root.height;
+            submit-prompt(text) => { root.submit-prompt(text); }
+            submit-command(text) => { root.submit-command(text); }
+            command-edited(text) => { root.command-edited(text); }
+            completion-selected(text) => { root.completion-selected(text); }
+            ask-ai-about-command(text) => { root.ask-ai-about-command(text); }
+            command-shallower => { root.command-shallower(); }
+            command-deeper => { root.command-deeper(); }
         }
     }
 }

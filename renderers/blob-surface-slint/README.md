@@ -7,7 +7,7 @@ This directory is a **standalone renderer workspace**, intentionally excluded fr
 The trusted/semantic core of The Blob is currently validated at Rust 1.85. Slint 1.17.1 requires Rust 1.92, so the graphical toolkit must not raise the MSRV of the core simply because one renderer evolves faster.
 
 ```text
-blob-core / Alfred / resolver / history
+blob-core / Alfred / resolver / history / system workspace
         Rust 1.85 baseline
                  |
           semantic Surface
@@ -18,30 +18,40 @@ blob-core / Alfred / resolver / history
         Rust 1.92 + Slint 1.17.1
 ```
 
-This separation is architectural, not temporary: future macOS Native, Android Native, Hyprland-specific or other renderers must be replaceable without redefining Workspace/Task/Capability semantics.
+This separation is architectural, not temporary: future macOS Native, Android Native, Hyprland-specific or other renderers must be replaceable without redefining Workspace/Task/Capability/SystemSpec semantics.
 
-## What the first Surface shows
+## Current alpha Surface
 
-The demo runs the already-tested MVP vertical slice before opening the window and renders:
+The GUI now contains the first Calm OS alpha composition:
 
-- the Alfred Situation;
-- final Task state;
-- selected Capability implementation and node;
-- independent verifier evidence;
-- structured execution result;
-- the causal record sequence.
+- **Now**: a calm overview with the validated Development activity and the Personal Computer workspace;
+- **Personal Computer / System Workspace**: reads the real semantic demo baseline from `blob-system-workspace`;
+- **Bluetooth**: clicking the switch creates `SystemWorkspaceProposal::bluetooth_demo()` and exposes the semantic `disabled -> enabled` diff;
+- **Technician**: evidence-backed, collapsible, and still unable to authorize execution;
+- **Inspector**: exact resolver/verifier/causal evidence from the validated MVP vertical slice;
+- **History/Fabric**: intentional placeholders until real projections are wired.
 
-The UI therefore renders **semantic state produced by the system**, not a hand-authored fake screenshot.
+The Bluetooth switch deliberately does **not** flip the baseline state immediately. It produces a semantic proposal and leaves Bluetooth OFF until a later deterministic backend/materialization/verification/authority path succeeds. The renderer does not emit raw Nix and does not activate the live system.
+
+The major visual blocks are kept as reusable Slint components so a later layout engine can add move/resize/dock persistence without changing the semantic Workspace model.
 
 ## Run
 
-Use Rust 1.92 or newer in this directory:
+Use Rust 1.92 or newer.
+
+From this directory:
 
 ```text
 cargo run
 ```
 
-The demo uses a controlled local `sh` process as the MVP execution Capsule. This is explicitly not a security sandbox.
+Or from the repository root:
+
+```text
+cargo run --manifest-path renderers/blob-surface-slint/Cargo.toml
+```
+
+The startup Development activity uses a controlled local `sh` process as the MVP execution Capsule. This is explicitly not a security sandbox. The System Workspace portion is a semantic isolated demo and performs no live activation.
 
 ## Slint licensing
 

@@ -1,0 +1,165 @@
+import { BlobTheme } from "../design/tokens.slint";
+
+// Canonical P0 3D renderer.
+// System/workspace actions arrive from above the renderer. Immediate pointer
+// reactions remain local because they are presentation feedback, not semantic
+// system state. Dedicated clips can replace these transform fallbacks later.
+export component BlobAvatar inherits Rectangle {
+    in property <string> action: "idle";
+    in property <string> name;
+    in property <string> role;
+    in property <string> status;
+    in property <string> accessory;
+    in property <color> blob-color;
+    in property <bool> focused: false;
+    callback activated;
+
+    property <bool> idle-up: false;
+    property <bool> sway-left: false;
+    property <bool> sparkle: false;
+    property <bool> waving: false;
+    property <string> effective-action: root.action == "idle" && root.waving ? "wave"
+        : root.action == "idle" && touch.has-hover ? "look"
+        : root.action;
+
+    width: 224px;
+    height: 254px;
+    background: transparent;
+
+    Timer {
+        interval: root.effective-action == "warning" ? 620ms
+            : root.effective-action == "busy" ? 1150ms
+            : root.effective-action == "sleep" ? 7600ms
+            : root.accessory == "helmet" ? 4600ms
+            : root.accessory == "glasses" ? 5200ms
+            : root.accessory == "wrench" ? 4900ms
+            : 5600ms;
+        running: true;
+        triggered() => {
+            root.idle-up = !root.idle-up;
+            root.sway-left = !root.sway-left;
+        }
+    }
+
+    Timer {
+        interval: root.effective-action == "busy" ? 4200ms
+            : root.effective-action == "warning" ? 2800ms
+            : root.accessory == "helmet" ? 7900ms
+            : root.accessory == "glasses" ? 9000ms
+            : root.accessory == "wrench" ? 8400ms
+            : 9700ms;
+        running: root.effective-action != "sleep";
+        triggered() => { root.sparkle = true; }
+    }
+    Timer { interval: 850ms; running: root.sparkle; triggered() => { root.sparkle = false; } }
+    Timer { interval: 720ms; running: root.waving; triggered() => { root.waving = false; } }
+
+    halo := Rectangle {
+        x: touch.has-hover ? 6px : 14px;
+        y: touch.has-hover ? 0px : 9px;
+        width: touch.has-hover ? 212px : 196px;
+        height: touch.has-hover ? 204px : 192px;
+        border-radius: 102px;
+        background: touch.has-hover || root.focused ? BlobTheme.glow-soft : transparent;
+        border-color: root.effective-action == "warning" ? BlobTheme.warning : (root.focused ? root.blob-color : transparent);
+        border-width: root.focused || root.effective-action == "warning" ? 1px : 0px;
+        opacity: root.effective-action == "sleep" ? 0.22 : (root.focused ? 0.72 : 0.42);
+        animate x, y, width, height, background, opacity { duration: 180ms; easing: ease-out; }
+    }
+
+    character := Rectangle {
+        x: root.effective-action == "warning" ? (root.sway-left ? -2px : 10px)
+            : touch.has-hover ? 1px
+            : (root.sway-left ? 3px : 7px);
+        y: root.effective-action == "sleep" ? 15px
+            : root.effective-action == "wave" ? (root.idle-up ? -5px : 3px)
+            : touch.has-hover ? -8px
+            : (root.idle-up ? 0px : 7px);
+        width: 216px;
+        height: 205px;
+        background: transparent;
+        opacity: root.effective-action == "sleep" ? 0.76 : 1.0;
+        animate x, y, opacity { duration: root.effective-action == "warning" ? 120ms : (touch.has-hover ? 170ms : 700ms); easing: ease-in-out; }
+
+        Rectangle {
+            x: touch.has-hover ? 54px : 48px;
+            y: 188px;
+            width: root.effective-action == "sleep" ? 132px : (touch.has-hover ? 108px : 120px);
+            height: root.effective-action == "sleep" ? 12px : (touch.has-hover ? 7px : 10px);
+            border-radius: 6px;
+            background: #00000058;
+            animate x, width, height { duration: 180ms; easing: ease-out; }
+        }
+
+        Image {
+            x: touch.has-hover ? -3px : (root.idle-up ? 0px : 2px);
+            y: touch.has-hover ? -5px : (root.idle-up ? 0px : 3px);
+            width: root.effective-action == "busy" ? (root.idle-up ? 220px : 210px)
+                : touch.has-hover ? 222px
+                : (root.idle-up ? 216px : 212px);
+            height: root.effective-action == "busy" ? (root.idle-up ? 202px : 192px)
+                : touch.has-hover ? 202px
+                : (root.idle-up ? 198px : 194px);
+            source: root.accessory == "helmet" ? @image-url("../assets/generated/blob-dev-idle.png")
+                : root.accessory == "glasses" ? @image-url("../assets/generated/blob-docs-idle.png")
+                : root.accessory == "wrench" ? @image-url("../assets/generated/blob-system-idle.png")
+                : @image-url("../assets/generated/blob-notes-idle.png");
+            image-fit: contain;
+            image-rendering: smooth;
+            accessible-role: none;
+            animate x, y, width, height { duration: root.effective-action == "warning" ? 120ms : (touch.has-hover ? 180ms : 700ms); easing: ease-in-out; }
+        }
+
+        Rectangle {
+            x: root.sparkle ? 198px : 190px;
+            y: root.sparkle ? 31px : 50px;
+            width: root.sparkle ? 8px : 4px;
+            height: root.sparkle ? 8px : 4px;
+            border-radius: 4px;
+            background: root.effective-action == "warning" ? BlobTheme.warning : root.blob-color;
+            opacity: root.sparkle || touch.has-hover ? 0.66 : 0.08;
+            animate x, y, width, height, opacity { duration: 420ms; easing: ease-out; }
+        }
+        Rectangle {
+            x: 11px;
+            y: root.sparkle ? 58px : 73px;
+            width: root.sparkle ? 6px : 3px;
+            height: root.sparkle ? 6px : 3px;
+            border-radius: 3px;
+            background: #ffffff;
+            opacity: root.sparkle ? 0.52 : 0.06;
+            animate y, width, height, opacity { duration: 460ms; easing: ease-out; }
+        }
+    }
+
+    Text {
+        x: 10px;
+        y: 207px;
+        width: 204px;
+        height: 23px;
+        text: root.name;
+        color: root.focused ? root.blob-color : BlobTheme.text-muted;
+        font-size: BlobTheme.font-label;
+        font-weight: root.focused ? 600 : 500;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        x: 8px;
+        y: 231px;
+        width: 208px;
+        height: 21px;
+        text: root.role + " · " + root.effective-action + (root.status == "" ? "" : " · " + root.status);
+        color: root.effective-action == "warning" ? BlobTheme.warning : BlobTheme.text-faint;
+        font-size: BlobTheme.font-small;
+        horizontal-alignment: center;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if (root.action == "idle") { root.waving = true; }
+            root.activated();
+        }
+    }
+}

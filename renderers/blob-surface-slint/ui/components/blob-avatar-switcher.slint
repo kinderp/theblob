@@ -1,0 +1,63 @@
+import { BlobAvatar } from "blob-avatar.slint";
+import { PixelBlobAvatar } from "pixel-blob-avatar.slint";
+import { AsciiBlobAvatar } from "ascii-blob-avatar.slint";
+
+export component BlobAvatarSwitcher inherits Rectangle {
+    in property <string> style: "soft3d";
+    in property <string> action: "idle";
+    in property <string> name;
+    in property <string> role;
+    in property <string> status;
+    in property <string> accessory;
+    in property <color> blob-color;
+    in property <bool> focused: false;
+    callback activated;
+
+    // Temporary P0 adapter until the Rust behavior resolver is wired directly
+    // to the renderer. Explicit semantic action always wins; otherwise the
+    // existing demo status is translated into the same small action vocabulary.
+    property <string> resolved-action: root.action != "idle" ? root.action
+        : root.status == "proposal pending" ? "warning"
+        : root.role == "DEV" && root.status != "" && root.status != "tests ✓" ? "busy"
+        : "idle";
+
+    width: 224px;
+    height: 250px;
+    background: transparent;
+
+    if root.style == "soft3d": BlobAvatar {
+        action: root.resolved-action;
+        name: root.name;
+        role: root.role;
+        status: root.status;
+        accessory: root.accessory;
+        blob-color: root.blob-color;
+        focused: root.focused;
+        activated => { root.activated(); }
+    }
+
+    // Pixel and ASCII intentionally stay on their existing P0 behavior until
+    // their own animation packs are designed. The shared semantic action API
+    // already exists above them, so they can adopt it without changing Shell state.
+    if root.style == "pixel": PixelBlobAvatar {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.name;
+        role: root.role;
+        status: root.status;
+        accessory: root.accessory;
+        blob-color: root.blob-color;
+        focused: root.focused;
+        activated => { root.activated(); }
+    }
+
+    if root.style == "ascii": AsciiBlobAvatar {
+        name: root.name;
+        role: root.role;
+        status: root.status;
+        accessory: root.accessory;
+        blob-color: root.blob-color;
+        focused: root.focused;
+        activated => { root.activated(); }
+    }
+}

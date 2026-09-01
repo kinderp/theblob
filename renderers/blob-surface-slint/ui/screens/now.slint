@@ -7,6 +7,8 @@ export component NowView inherits Rectangle {
     in property <string> task-status;
     in property <string> binding-summary;
     in property <string> execution-output;
+    in property <string> system-workspace-title;
+    in property <string> bluetooth-label;
     callback open-workspace;
     callback open-inspector;
 
@@ -14,97 +16,156 @@ export component NowView inherits Rectangle {
 
     VerticalLayout {
         padding: BlobTheme.space-8;
-        spacing: BlobTheme.space-6;
+        spacing: BlobTheme.space-5;
 
         VerticalLayout {
             spacing: BlobTheme.space-2;
             Text {
-                text: "NOW";
+                text: "Good afternoon";
                 color: BlobTheme.text;
                 font-size: 28px;
                 font-weight: 700;
             }
             Text {
-                text: "Quello che conta adesso, non tutte le cose che il sistema sa.";
+                text: "What would you like to do?";
                 color: BlobTheme.text-muted;
                 font-size: 14px;
             }
         }
 
+        Rectangle {
+            height: 60px;
+            background: BlobTheme.surface;
+            border-color: BlobTheme.border;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-lg;
+
+            HorizontalLayout {
+                padding-left: BlobTheme.space-5;
+                padding-right: BlobTheme.space-5;
+                spacing: BlobTheme.space-3;
+                Text {
+                    text: "Describe an outcome, ask a question, or open a Workspace…";
+                    color: BlobTheme.text-faint;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Text {
+                    text: "Intent surface · next slice";
+                    color: BlobTheme.text-faint;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: "CONTINUE";
+            color: BlobTheme.text-faint;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
         HorizontalLayout {
             spacing: BlobTheme.space-5;
-            height: 220px;
+            height: 198px;
 
-            BlobCard {
-                horizontal-stretch: 3;
-                eyebrow: "ACTIVE WORKSPACE";
-                title: root.workspace-title;
-                body: root.situation-summary;
-                meta: "Task " + root.task-status;
+            Rectangle {
+                horizontal-stretch: 1;
+                background: BlobTheme.surface;
+                border-color: BlobTheme.border-soft;
+                border-width: 1px;
+                border-radius: BlobTheme.radius-xl;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-5;
+                    spacing: BlobTheme.space-3;
+                    Text { text: "DEVELOPMENT"; color: BlobTheme.accent; font-size: 11px; font-weight: 700; }
+                    Text { text: root.workspace-title; color: BlobTheme.text; font-size: 19px; font-weight: 700; wrap: word-wrap; }
+                    Text { text: root.situation-summary; color: BlobTheme.text-muted; font-size: 12px; wrap: word-wrap; }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    HorizontalLayout {
+                        BlobStatus { label: root.task-status; positive: true; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        BlobAction {
+                            width: 108px;
+                            label: "Why?";
+                            clicked => { root.open-inspector(); }
+                        }
+                    }
+                }
             }
 
-            BlobCard {
-                horizontal-stretch: 2;
-                eyebrow: "SYSTEM";
-                title: "Everything looks calm";
-                body: "No persistent system change is active. The demo remains isolated.";
-                meta: "Why? available in Inspector";
+            Rectangle {
+                horizontal-stretch: 1;
+                background: #f4fbf7;
+                border-color: #d9ede0;
+                border-width: 1px;
+                border-radius: BlobTheme.radius-xl;
+
+                VerticalLayout {
+                    padding: BlobTheme.space-5;
+                    spacing: BlobTheme.space-3;
+                    Text { text: "SYSTEM WORKSPACE"; color: BlobTheme.success; font-size: 11px; font-weight: 700; }
+                    Text { text: root.system-workspace-title; color: BlobTheme.text; font-size: 19px; font-weight: 700; }
+                    Text { text: root.bluetooth-label; color: BlobTheme.text-muted; font-size: 13px; }
+                    Text { text: "Semantic demo state · no live activation"; color: BlobTheme.text-faint; font-size: 11px; }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    HorizontalLayout {
+                        BlobStatus { label: "Healthy"; positive: true; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        BlobAction {
+                            width: 108px;
+                            label: "Open";
+                            primary: true;
+                            clicked => { root.open-workspace(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 90px;
+            background: BlobTheme.surface;
+            border-color: BlobTheme.border-soft;
+            border-width: 1px;
+            border-radius: BlobTheme.radius-lg;
+
+            HorizontalLayout {
+                padding: BlobTheme.space-5;
+                spacing: BlobTheme.space-4;
+                VerticalLayout {
+                    spacing: BlobTheme.space-2;
+                    Text { text: "SUGGESTED"; color: BlobTheme.text-faint; font-size: 10px; font-weight: 700; }
+                    Text { text: "Bluetooth is disabled in the isolated demo system."; color: BlobTheme.text; font-size: 14px; font-weight: 600; }
+                    Text { text: "Review the semantic change before any backend materialization."; color: BlobTheme.text-muted; font-size: 11px; }
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                BlobAction {
+                    width: 110px;
+                    label: "Review";
+                    clicked => { root.open-workspace(); }
+                }
             }
         }
 
         Rectangle {
             vertical-stretch: 1;
-            background: BlobTheme.surface-soft;
+            background: BlobTheme.surface;
             border-color: BlobTheme.border-soft;
             border-width: 1px;
-            border-radius: BlobTheme.radius-xl;
+            border-radius: BlobTheme.radius-lg;
 
             VerticalLayout {
-                padding: BlobTheme.space-6;
-                spacing: BlobTheme.space-4;
-
-                HorizontalLayout {
-                    Text {
-                        text: "CURRENT ACTIVITY";
-                        color: BlobTheme.text-faint;
-                        font-size: 11px;
-                        font-weight: 700;
-                    }
-                    Rectangle { horizontal-stretch: 1; background: transparent; }
-                    BlobStatus { label: "Verified"; positive: true; }
-                }
-
-                Text {
-                    text: root.binding-summary;
-                    color: BlobTheme.text;
-                    font-size: 21px;
-                    font-weight: 600;
-                    wrap: word-wrap;
-                }
-
-                Text {
-                    text: root.execution-output;
-                    color: BlobTheme.text-muted;
-                    font-size: 14px;
-                    wrap: word-wrap;
-                }
-
+                padding: BlobTheme.space-5;
+                spacing: BlobTheme.space-3;
+                Text { text: "RECENT ACTIVITY"; color: BlobTheme.text-faint; font-size: 10px; font-weight: 700; }
+                Text { text: root.binding-summary; color: BlobTheme.text; font-size: 14px; font-weight: 600; wrap: word-wrap; }
+                Text { text: root.execution-output; color: BlobTheme.text-muted; font-size: 12px; wrap: word-wrap; }
                 Rectangle { vertical-stretch: 1; background: transparent; }
-
-                HorizontalLayout {
-                    spacing: BlobTheme.space-3;
-                    BlobAction {
-                        width: 132px;
-                        label: "Workspace";
-                        clicked => { root.open-workspace(); }
-                    }
-                    BlobAction {
-                        width: 132px;
-                        label: "Why this?";
-                        clicked => { root.open-inspector(); }
-                    }
-                    Rectangle { horizontal-stretch: 1; background: transparent; }
-                }
+                Text { text: "This activity comes from the validated MVP vertical slice, not synthetic UI data."; color: BlobTheme.text-faint; font-size: 10px; }
             }
         }
     }
